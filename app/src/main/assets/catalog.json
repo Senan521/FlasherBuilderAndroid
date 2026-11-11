@@ -1,0 +1,563 @@
+{
+ "devices": [
+  {
+   "name": "Oneplus 13",
+   "types": [
+    {
+     "kind": "SuperHybrid Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "NA",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "RegionalHybrid Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "NA",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 13R",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 13S",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "IN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "IN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 13T",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 15",
+   "types": [
+    {
+     "kind": "SuperHybrid Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "NA",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "RegionalHybrid Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "NA",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 15R",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus 15T",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Ace 5",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Ace 5 Pro",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Ace 6",
+   "types": [
+    {
+     "kind": "SuperHybrid Flasher",
+     "regions": [
+      {
+       "region": "IN",
+       "needsBase": true
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Ace 6T",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Pad 2 Pro",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Pad 3",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Oneplus Pad 3 Pro",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "GLO",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Realme GT 7 Pro",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Realme NEO8",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "CN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "OPPO Find X9 Ultra",
+   "types": [
+    {
+     "kind": "Super Flasher",
+     "regions": [
+      {
+       "region": "APC",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "ID",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "JP",
+       "needsBase": false
+      },
+      {
+       "region": "MX",
+       "needsBase": false
+      },
+      {
+       "region": "MY",
+       "needsBase": false
+      },
+      {
+       "region": "SG",
+       "needsBase": false
+      },
+      {
+       "region": "TH",
+       "needsBase": false
+      },
+      {
+       "region": "TW",
+       "needsBase": false
+      },
+      {
+       "region": "VN",
+       "needsBase": false
+      }
+     ]
+    },
+    {
+     "kind": "Regional Flasher",
+     "regions": [
+      {
+       "region": "APC",
+       "needsBase": false
+      },
+      {
+       "region": "CN",
+       "needsBase": false
+      },
+      {
+       "region": "EU",
+       "needsBase": false
+      },
+      {
+       "region": "ID",
+       "needsBase": false
+      },
+      {
+       "region": "IN",
+       "needsBase": false
+      },
+      {
+       "region": "JP",
+       "needsBase": false
+      },
+      {
+       "region": "MX",
+       "needsBase": false
+      },
+      {
+       "region": "MY",
+       "needsBase": false
+      },
+      {
+       "region": "SG",
+       "needsBase": false
+      },
+      {
+       "region": "TH",
+       "needsBase": false
+      },
+      {
+       "region": "TW",
+       "needsBase": false
+      },
+      {
+       "region": "VN",
+       "needsBase": false
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

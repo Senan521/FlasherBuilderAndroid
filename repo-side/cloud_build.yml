@@ -1,0 +1,95 @@
+# Bu dosyayı Flasher_Builder FORK'unuzda .github/workflows/cloud_build.yml olarak ekleyin.
+# Android uygulaması bu workflow'u workflow_dispatch ile tetikler. Orijinal build_tools.yml self-hosted
+# runner kullanır; bu sürüm GitHub'ın hazır (ubuntu-latest) runner'ında çalışır, SFTP/Telegram içermez.
+name: Cloud build (Android app)
+run-name: "cloud-build ${{ inputs.client_id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:         { description: "Cihaz",        required: true, type: string }
+      flasher_type:   { description: "Flasher türü", required: true, type: string }
+      region:         { description: "Bölge",        required: true, type: string }
+      ota_url:        { description: "Tam OTA ZIP URL", required: true, type: string }
+      base_ota_url:   { description: "BASE OTA ZIP URL (yalnızca Ace 6 COS dönüşümü)", required: false, default: "", type: string }
+      vulnerable_abl: { description: "X9 Ultra zafiyetli ABL (none/yes/no)", required: false, default: "none", type: string }
+      zip_output:     { description: "Çıktıyı ZIP'le", required: false, default: true, type: boolean }
+      client_id:      { description: "Uygulama eşleştirme kimliği", required: true, type: string }
+      retention_days: { description: "Çıktı saklama (gün)", required: false, default: "1", type: string }
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      # Backend en az ~4x OTA boyutu boş alan ister (ZIP'siz 3x); runner'ın alanını artırıyoruz.
+      - name: Disk alanı aç
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # requirements.txt (PySide6) gerekmez: worker yalnızca standart kütüphane kullanır.
+      - name: Araçları hazırla
+        run: |
+          python scripts/fetch_tools.py --platform linux
+          chmod +x lpmake/lpmake otaripper/otaripper || true
+
+      # Girdiler env üzerinden geçer (komut enjeksiyonunu önlemek için).
+      - name: Bloat indir
+        env:
+          DEVICE: ${{ inputs.device }}
+          KIND: ${{ inputs.flasher_type }}
+          REGION: ${{ inputs.region }}
+        run: |
+          python flasher_builder/backend.py --download-bloat \
+            --device "$DEVICE" --kind "$KIND" --region "$REGION" \
+            --bloat-dir "$RUNNER_TEMP/bloat"
+
+      # OTA URL'si doğrudan backend'e verilir: indirme, doğrulama ve (gerekirse) akışlı ODM çıkarma onda.
+      - name: Paketi oluştur
+        env:
+          DEVICE: ${{ inputs.device }}
+          KIND: ${{ inputs.flasher_type }}
+          REGION: ${{ inputs.region }}
+          OTA_URL: ${{ inputs.ota_url }}
+          BASE_URL: ${{ inputs.base_ota_url }}
+          ABL: ${{ inputs.vulnerable_abl }}
+          ZIP_OUTPUT: ${{ inputs.zip_output }}
+        run: |
+          args=(--device "$DEVICE" --kind "$KIND" --region "$REGION"
+                --bloat-dir "$RUNNER_TEMP/bloat" --ota "$OTA_URL" --output "$RUNNER_TEMP/out")
+          if [ -n "$BASE_URL" ]; then args+=(--base "$BASE_URL"); fi
+          if [ "$ABL" = "yes" ]; then args+=(--vulnerable-abl); fi
+          if [ "$ABL" = "no" ]; then args+=(--stock-abl); fi
+          if [ "$ZIP_OUTPUT" = "false" ]; then args+=(--no-zip); fi
+          python flasher_builder/backend.py "${args[@]}"
+
+      # compression-level 1: telefonda ZipInputStream ile akışlı açılabilmesi için DEFLATE kalmalı.
+      # Bloat/OTA'nın kendisi yüklenmez; yalnızca iş klasöründeki sonuç (ZIP ya da klasör + build.json).
+      - name: Çıktıyı yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: flasher-${{ inputs.client_id }}
+          path: |
+            ${{ runner.temp }}/out/**
+            !${{ runner.temp }}/out/**/download/**
+            !${{ runner.temp }}/out/**/assets/**
+            !${{ runner.temp }}/out/**/stage/**
+          compression-level: 1
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: error
