@@ -30,6 +30,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val currentType: KindEntry? get() = currentDevice?.types?.firstOrNull { it.kind == form.kind }
     val needsBase: Boolean get() = currentType?.regions?.firstOrNull { it.region == form.region }?.needsBase == true
     val needsAbl: Boolean get() = form.device == Catalog.X9U
+    val supportsCustomOdm: Boolean get() = form.device == Catalog.R13
 
     // Cihazdan seçilen OTA/BASE dosyaları.
     var otaFile by mutableStateOf<LocalInbox.Staged?>(null); private set
@@ -107,7 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             app, form,
             ota = otaFile?.path ?: form.otaUrl,
             base = if (needsBase) (baseFile?.path ?: form.baseOtaUrl) else "",
-            customOdm = odmFile?.path,
+            customOdm = if (supportsCustomOdm) odmFile?.path else null,
         )
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }

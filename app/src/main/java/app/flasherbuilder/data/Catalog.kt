@@ -10,6 +10,7 @@ data class DeviceEntry(val name: String, val types: List<KindEntry>)
 /** assets/catalog.json: repo'daki build_tools.yml tablolarından üretilen geçerli 86 kombinasyon. */
 object Catalog {
     const val X9U = "OPPO Find X9 Ultra"
+    const val R13 = "Oneplus 13R"      // özel odm.img yalnızca bu cihazda sunulur (Ace 5 kullanıcıları için)
 
     fun load(ctx: Context): List<DeviceEntry> {
         val text = ctx.assets.open("catalog.json").bufferedReader().use { it.readText() }

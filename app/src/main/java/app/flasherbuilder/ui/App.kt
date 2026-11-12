@@ -338,7 +338,7 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
         }
         vm.stageError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
-        OdmSection(vm, enabled)
+        if (vm.supportsCustomOdm) OdmSection(vm, enabled)
 
         if (vm.needsAbl) {
             Text(stringResource(R.string.abl_question), style = MaterialTheme.typography.titleSmall)
