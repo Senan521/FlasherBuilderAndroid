@@ -34,6 +34,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Cihazdan seçilen OTA/BASE dosyaları.
     var otaFile by mutableStateOf<LocalInbox.Staged?>(null); private set
     var baseFile by mutableStateOf<LocalInbox.Staged?>(null); private set
+    var odmFile by mutableStateOf<LocalInbox.Staged?>(null); private set
     var stageProgress by mutableStateOf<Float?>(null); private set     // null: kopyalama yok
     var stageError by mutableStateOf<String?>(null); private set
     private var stageJob: Job? = null
@@ -49,6 +50,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         otaFile = LocalInbox.existing(app, "OTA")
         baseFile = LocalInbox.existing(app, "BASE")
+        odmFile = LocalInbox.existing(app, "ODM")
     }
 
     fun stageFile(role: String, uri: Uri) {
@@ -58,7 +60,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         stageJob = viewModelScope.launch {
             try {
                 val staged = LocalInbox.stage(getApplication(), uri, role) { stageProgress = it }
-                if (role == "OTA") otaFile = staged else baseFile = staged
+                when (role) { "OTA" -> otaFile = staged; "BASE" -> baseFile = staged; else -> odmFile = staged }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -71,7 +73,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearStaged(role: String) {
         LocalInbox.clear(getApplication(), role)
-        if (role == "OTA") otaFile = null else baseFile = null
+        when (role) { "OTA" -> otaFile = null; "BASE" -> baseFile = null; else -> odmFile = null }
     }
 
     fun saveForm(f: Form) { form = f; prefs.saveForm(f) }
@@ -105,6 +107,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             app, form,
             ota = otaFile?.path ?: form.otaUrl,
             base = if (needsBase) (baseFile?.path ?: form.baseOtaUrl) else "",
+            customOdm = odmFile?.path,
         )
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }

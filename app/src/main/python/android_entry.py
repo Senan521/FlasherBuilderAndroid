@@ -18,6 +18,25 @@ from pathlib import Path
 INPROC = '@@inproc'
 INBOX_DIR = 'ota-inbox'      # LocalInbox'ın seçilen OTA dosyalarını koyduğu klasör adı
 
+# Kullanıcının seçtiği özel odm.img (--custom-odm). Paketteki odm.img'nin yerine geçer.
+_custom_odm = None
+
+
+def _check_odm_image(path):
+    """Seçilen dosyanın bir Android bölüm imajı (sparse / erofs / ext4) olduğunu doğrular."""
+    from flasher_builder.backend import BuildError
+    if not path.is_file() or not path.stat().st_size:
+        raise BuildError('The selected odm.img is missing or empty. Pick the file again.')
+    with path.open('rb') as f:
+        head = f.read(4096)
+    sparse = head[:4] == b'\x3a\xff\x26\xed'
+    erofs = head[1024:1028] == b'\xe2\xe1\xf5\xe0'
+    ext4 = head[1080:1082] == b'\x53\xef'
+    if not (sparse or erofs or ext4):
+        raise BuildError('The selected file is not an Android partition image (sparse, erofs or ext4). '
+                         'Pick the odm.img extracted from a ROM.')
+    return 'sparse' if sparse else 'erofs' if erofs else 'ext4'
+
 
 class _Sink:
     """File-like object that forwards complete lines to ``sink.onLine(str)``."""
@@ -195,6 +214,10 @@ def _patch(native_dir):
                 if not tool(None, name).is_file():
                     raise backend.BuildError(f'Native tool missing from the APK: {name}')
             print('Android backend ready (arm64 otaripper + lpmake).', flush=True)
+            if _custom_odm is not None:                     # yanlış dosyayı indirmelerden ÖNCE yakala
+                kind = _check_odm_image(_custom_odm)
+                print(f'Custom odm.img selected: {_custom_odm.name} '
+                      f'({_custom_odm.stat().st_size / 1e6:.1f} MB, {kind}) — it will replace the ROM\'s odm.img.', flush=True)
         backend.check_environment = check_environment
 
     for name in ('flasher_builder.native_pipeline', 'flasher_builder.selftest'):
@@ -205,6 +228,34 @@ def _patch(native_dir):
                 module.tool = host.tool
 
     if not _patched:
+        from flasher_builder import native_pipeline
+        original_pack_super = native_pipeline.pack_super
+        original_build_images = native_pipeline.build_images
+
+        def pack_super(worker, assets, directory, size):
+            # Super paketlerinde odm, super.img'e girmeden hemen önce değiştirilir.
+            if _custom_odm is not None:
+                _check_odm_image(_custom_odm)
+                print(f'Replacing odm.img with the custom image ({_custom_odm.stat().st_size / 1e6:.1f} MB).', flush=True)
+                worker.copy(_custom_odm, Path(directory) / 'odm.img')
+            return original_pack_super(worker, assets, directory, size)
+
+        def build_images(worker, assets, result, download, dev, kind, region, size, builder, odm=None):
+            final = original_build_images(worker, assets, result, download, dev, kind, region, size, builder, odm)
+            # Super olmayan (Regional) paketlerde odm.img ayrı dosyadır: yerinde değiştirilir.
+            if _custom_odm is not None and 'Super' not in kind:
+                targets = sorted(Path(final).rglob('odm.img'))
+                if not targets:
+                    raise backend.BuildError('This package type has no separate odm.img to replace. '
+                                             'Choose a Super flasher type or remove the custom odm.img.')
+                for target in targets:
+                    print(f'Replacing {target.relative_to(final)} with the custom odm.img.', flush=True)
+                    worker.copy(_custom_odm, target)
+            return final
+
+        native_pipeline.pack_super = pack_super
+        native_pipeline.build_images = build_images
+
         original_run = backend.Worker.run
 
         def run(self, args, cwd=None, env=None):
@@ -266,8 +317,19 @@ def _run_inprocess(backend, worker, args):
 
 # ───────────────────────── entry ─────────────────────────
 
+def _take_option(argv, name):
+    argv = list(argv)
+    if name in argv:
+        i = argv.index(name)
+        value = argv[i + 1] if i + 1 < len(argv) else None
+        del argv[i:i + 2]
+        return argv, value
+    return argv, None
+
+
 def run(root, native_dir, argv, sink):
     """Run the backend CLI with ``argv`` (list of str). Returns its exit code (0 ok, 130 cancelled)."""
+    global _custom_odm
     root = str(root)
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -276,9 +338,12 @@ def run(root, native_dir, argv, sink):
     saved = sys.stdout, sys.stderr, sys.argv
     sys.stdout = sys.stderr = out
     try:
+        args = [str(a) for a in (argv.toArray() if hasattr(argv, 'toArray') else argv)]
+        args, custom = _take_option(args, '--custom-odm')
+        _custom_odm = Path(custom) if custom else None
         _patch(str(native_dir) if native_dir else '')
         from flasher_builder import backend
-        sys.argv = ['flasher-worker', '--repo', root] + [str(a) for a in (argv.toArray() if hasattr(argv, 'toArray') else argv)]
+        sys.argv = ['flasher-worker', '--repo', root] + args
         return int(backend.main())
     except SystemExit as exit_:
         return int(exit_.code or 0) if isinstance(exit_.code, int) or exit_.code is None else 1

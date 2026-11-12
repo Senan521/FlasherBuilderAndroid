@@ -68,4 +68,9 @@
     <string name="ch_done">Build result</string>
     <string name="notif_done">Build complete</string>
     <string name="notif_failed">Build failed</string>
+    <string name="odm_title">Custom odm.img (optional)</string>
+    <string name="odm_hint">Replaces the ODM inside the built package, e.g. an ODM from another ROM to fix the camera. Leave empty to keep the ROM\'s own ODM.</string>
+    <string name="odm_pick">Pick odm.img</string>
+    <string name="odm_selected">Custom odm.img selected</string>
+    <string name="err_not_img">The selected file is not an Android partition image (sparse, erofs or ext4). Pick the odm.img extracted from a ROM.</string>
 </resources>
