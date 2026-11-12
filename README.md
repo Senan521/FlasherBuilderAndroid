@@ -63,7 +63,9 @@ Binary'ler Git'e eklenmez (`.gitignore`), APK içine `lib*.so` adıyla girer.
   (varsayılan: koaaN/Flasher_Builder `main`; fork için: Actions → "Run workflow" → `source_repo`).
 - `app/src/main/python/android_entry.py` upstream kodu değiştirmeden uyarlar: yerel araçlar APK'dan,
   yardımcı süreçler uygulama içinde, indirmeler urllib ile (kaldığı yerden devam eder), çıktı uygulamaya akar.
-- Akış: bloat indir → OTA indir → partition çıkar → lpmake → ZIP + SHA-256 → "İndirilenler'e kaydet".
+- OTA bağlantı yerine **cihazdan dosya seçilebilir** (ZIP): dosya çalışma alanına bir kez kopyalanır, backend onu
+  kopyalamadan job klasörüne taşır (ekstra yer gerekmez). Ace 6 COS dönüşümünde BASE dosyası da seçilebilir.
+- Akış: bloat indir → OTA indir/taşı → partition çıkar → lpmake → ZIP + SHA-256 → "İndirilenler'e kaydet".
 - Çalışma alanı uygulamanın dahili depolamasındadır; "Çalışma alanını temizle" ile boşaltılır.
 - Disk: OTA boyutunun ~4 katı (8 GB OTA ≈ 32 GB). Eksikse backend net bir hata verir.
 

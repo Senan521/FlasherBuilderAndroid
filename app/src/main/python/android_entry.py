@@ -16,6 +16,7 @@ import traceback
 from pathlib import Path
 
 INPROC = '@@inproc'
+INBOX_DIR = 'ota-inbox'      # LocalInbox'ın seçilen OTA dosyalarını koyduğu klasör adı
 
 
 class _Sink:
@@ -212,6 +213,26 @@ def _patch(native_dir):
             return original_run(self, args, cwd=cwd, env=env)
 
         backend.Worker.run = run
+
+        original_source = backend.Worker.source
+
+        def source(self, source, dest):
+            """Cihazdan seçilen OTA (ota-inbox içinde) kopyalanmaz, job klasörüne taşınır: ekstra yer gerekmez."""
+            cleaned = backend.clean_source(source)
+            if cleaned and not backend.is_url(cleaned):
+                path = Path(cleaned).expanduser().resolve()
+                if path.parent.name == INBOX_DIR:
+                    if not path.is_file():
+                        raise backend.BuildError(f'OTA file not found: {path.name}. Pick the file again.')
+                    backend.validate_ota(path)
+                    print(f'Moving {path.name} into the job folder…', flush=True)
+                    self.check()
+                    import shutil
+                    shutil.move(str(path), str(dest))
+                    return backend.validate_ota(dest)
+            return original_source(self, source, dest)
+
+        backend.Worker.source = source
         _patched = True
 
 
