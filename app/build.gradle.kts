@@ -65,10 +65,7 @@ chaquopy {
 dependencies {
     implementation("androidx.compose.material3:material3:1.4.0-alpha15")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
-    implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }

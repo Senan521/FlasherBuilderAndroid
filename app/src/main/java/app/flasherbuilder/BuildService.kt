@@ -5,14 +5,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.os.PowerManager
-import app.flasherbuilder.data.BuildEngine
-import app.flasherbuilder.data.Phase
 import app.flasherbuilder.data.LocalEngine
+import app.flasherbuilder.data.Phase
 import app.flasherbuilder.data.Ui
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,11 +19,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-/** Build takibi/indirme sürerken süreci canlı tutar ve ilerlemeyi bildirimde gösterir. */
+/** Build sürerken süreci canlı tutar ve ilerlemeyi bildirimde gösterir (ekran kapalıyken de çalışır). */
 class BuildService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var watcher: Job? = null
-    private var local = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val nm get() = getSystemService(NotificationManager::class.java)
 
@@ -34,25 +31,23 @@ class BuildService : Service() {
     override fun onCreate() {
         super.onCreate()
         nm.createNotificationChannel(
-            NotificationChannel(CH_PROGRESS, "Build ilerlemesi", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CH_PROGRESS, getString(R.string.ch_progress), NotificationManager.IMPORTANCE_LOW)
         )
         nm.createNotificationChannel(
-            NotificationChannel(CH_DONE, "Build sonucu", NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CH_DONE, getString(R.string.ch_done), NotificationManager.IMPORTANCE_DEFAULT)
         )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        intent?.getStringExtra(EXTRA_MODE)?.let { local = it == MODE_LOCAL }
-        val source = if (local) LocalEngine.ui else BuildEngine.ui
-        if (intent?.action == ACTION_CANCEL) {
-            if (local) LocalEngine.cancel() else BuildEngine.cancel(applicationContext)
-        }
-        startForeground(NOTIF_PROGRESS, progressNotification(source.value),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        if (intent?.action == ACTION_CANCEL) LocalEngine.cancel()
+        startForeground(
+            NOTIF_PROGRESS, progressNotification(LocalEngine.ui.value),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
         acquireWakeLock()
         if (watcher == null) {
             watcher = scope.launch {
-                source.collect { ui ->
+                LocalEngine.ui.collect { ui ->
                     if (ui.busy) nm.notify(NOTIF_PROGRESS, progressNotification(ui)) else finish(ui)
                 }
             }
@@ -60,7 +55,7 @@ class BuildService : Service() {
         return START_NOT_STICKY
     }
 
-    /** Android 15+: dataSync servisi ~6 saat sonra durdurulur; ilerleme GitHub'da sürer, uygulamadan devam edilir. */
+    /** Android 15+: dataSync servisi ~6 saat sonra durdurulur. */
     override fun onTimeout(startId: Int, fgsType: Int) {
         stopSelf()
     }
@@ -81,7 +76,7 @@ class BuildService : Service() {
                     if (ui.phase == Phase.Done) android.R.drawable.stat_sys_download_done
                     else android.R.drawable.stat_notify_error
                 )
-                .setContentTitle(if (ui.phase == Phase.Done) "Build tamamlandı" else "Build başarısız")
+                .setContentTitle(getString(if (ui.phase == Phase.Done) R.string.notif_done else R.string.notif_failed))
                 .setContentText(ui.message)
                 .setStyle(Notification.BigTextStyle().bigText(ui.resultPath?.let { "${ui.message}\n$it" } ?: ui.message))
                 .setContentIntent(openApp())
@@ -95,25 +90,23 @@ class BuildService : Service() {
     private fun progressNotification(ui: Ui): Notification {
         val b = Notification.Builder(this, CH_PROGRESS)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Flasher Builder")
-            .setContentText(ui.message.ifEmpty { "Hazırlanıyor…" })
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(ui.message.ifEmpty { getString(R.string.local_preparing) })
             .setContentIntent(openApp())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(
                 Notification.Action.Builder(
-                    null, "İptal",
+                    null, getString(R.string.cancel),
                     PendingIntent.getService(
                         this, 1,
-                        Intent(this, BuildService::class.java).setAction(ACTION_CANCEL)
-                            .putExtra(EXTRA_MODE, if (local) MODE_LOCAL else MODE_CLOUD),
+                        Intent(this, BuildService::class.java).setAction(ACTION_CANCEL),
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 ).build()
             )
         val p = ui.progress
-        if (p != null && (ui.phase == Phase.Downloading || ui.phase == Phase.Running)) b.setProgress(100, (p * 100).toInt(), false)
-        else b.setProgress(0, 0, true)
+        if (p != null) b.setProgress(100, (p * 100).toInt(), false) else b.setProgress(0, 0, true)
         return b.build()
     }
 
@@ -136,9 +129,6 @@ class BuildService : Service() {
 
     companion object {
         const val ACTION_CANCEL = "app.flasherbuilder.CANCEL"
-        const val EXTRA_MODE = "mode"
-        const val MODE_CLOUD = "cloud"
-        const val MODE_LOCAL = "local"
         private const val CH_PROGRESS = "progress"
         private const val CH_DONE = "done"
         private const val NOTIF_PROGRESS = 1

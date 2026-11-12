@@ -1,5 +1,7 @@
 package app.flasherbuilder.data
 
+import app.flasherbuilder.R
+import app.flasherbuilder.Str
 import android.content.ContentValues
 import android.content.Context
 import android.os.Environment
@@ -15,10 +17,10 @@ import java.io.IOException
 object LocalExport {
     suspend fun toDownloads(ctx: Context, zip: File, onProgress: (Float) -> Unit): String =
         withContext(Dispatchers.IO) {
-            if (!zip.isFile) throw IOException("Dosya bulunamadı: ${zip.name}")
+            if (!zip.isFile) throw IOException(Str.get(R.string.err_file_missing, zip.name))
             val free = StatFs(Environment.getExternalStorageDirectory().path).availableBytes
             if (free < zip.length() + 200_000_000L) {
-                throw IOException("Kopyalamak için yeterli boş alan yok. Önce başka dosyaları silin ya da çalışma alanını temizleyin.")
+                throw IOException(Str.get(R.string.err_export_space))
             }
             val sha = File(zip.path + ".sha256")
             val total = zip.length().toFloat().coerceAtLeast(1f)
@@ -36,7 +38,7 @@ object LocalExport {
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw IOException("İndirilenler klasörüne dosya oluşturulamadı.")
+            ?: throw IOException(Str.get(R.string.err_mediastore))
         try {
             resolver.openOutputStream(uri)?.use { out ->
                 src.inputStream().use { input ->
@@ -51,7 +53,7 @@ object LocalExport {
                         kotlin.coroutines.coroutineContext.ensureActive()
                     }
                 }
-            } ?: throw IOException("Çıkış akışı açılamadı.")
+            } ?: throw IOException(Str.get(R.string.err_out_stream))
             resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
         } catch (t: Throwable) {
             resolver.delete(uri, null, null)
