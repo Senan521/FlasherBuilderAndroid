@@ -257,7 +257,7 @@ def run(root, native_dir, argv, sink):
     try:
         _patch(str(native_dir) if native_dir else '')
         from flasher_builder import backend
-        sys.argv = ['flasher-worker', '--repo', root] + [str(a) for a in argv]
+        sys.argv = ['flasher-worker', '--repo', root] + [str(a) for a in (argv.toArray() if hasattr(argv, 'toArray') else argv)]
         return int(backend.main())
     except SystemExit as exit_:
         return int(exit_.code or 0) if isinstance(exit_.code, int) or exit_.code is None else 1

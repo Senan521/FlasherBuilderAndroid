@@ -140,7 +140,7 @@ object LocalEngine {
     private fun py(app: Context, root: File, nativeDir: String, argv: List<String>): Int {
         if (!Python.isStarted()) Python.start(AndroidPlatform(app))
         return Python.getInstance().getModule("android_entry")
-            .callAttr("run", root.path, nativeDir, ArrayList(argv), LogSink(::handleLine))
+            .callAttr("run", root.path, nativeDir, argv.toTypedArray(), LogSink(::handleLine))
             .toInt()
     }
 
