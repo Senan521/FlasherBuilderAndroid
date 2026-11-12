@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.chaquo.python")
 }
 
 android {
@@ -54,9 +55,16 @@ android {
 
 kotlin { jvmToolchain(17) }
 
+// Backend (Flasher_Builder'ın Python kodu) uygulama içinde çalışır. buildPython sürümü 3.12 ile aynı olmalı.
+chaquopy {
+    defaultConfig {
+        version = "3.12"
+    }
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.09.00"))
-    implementation("androidx.compose.material3:material3:1.5.0-alpha16")
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.activity:activity-compose:1.11.0")

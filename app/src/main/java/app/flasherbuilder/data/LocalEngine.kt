@@ -1,0 +1,185 @@
+package app.flasherbuilder.data
+
+import android.content.Context
+import android.os.StatFs
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.io.File
+
+/** Python tarafı satırları bu nesnenin onLine metoduna gönderir (Chaquopy üzerinden çağrılır). */
+class LogSink(private val handler: (String) -> Unit) {
+    @Suppress("unused")
+    fun onLine(line: String) = handler(line)
+}
+
+/**
+ * Cihazda build: Flasher_Builder'ın Python backend'i Chaquopy ile uygulama içinde çalışır,
+ * otaripper ve lpmake APK'daki arm64 binary'leridir.
+ * İki aşama: (0) bloat indirme, (1) OTA indirme + paket oluşturma. Çıktı: tek ZIP.
+ */
+object LocalEngine {
+    private const val GB = 1_000_000_000L
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _ui = MutableStateFlow(Ui())
+    private val _log = MutableStateFlow<List<String>>(emptyList())
+    val ui: StateFlow<Ui> = _ui.asStateFlow()
+    val log: StateFlow<List<String>> = _log.asStateFlow()
+
+    private var job: Job? = null
+    @Volatile private var cancelRequested = false
+    @Volatile private var cancelFlag: File? = null
+
+    // Çalışan aşamanın durumu (handleLine tarafından güncellenir).
+    @Volatile private var stage = 0
+    @Volatile private var step = 0
+    @Volatile private var stepTitle = ""
+    @Volatile private var lastError: String? = null
+    @Volatile private var result: JSONObject? = null
+
+    // Dahili depolama: FUSE katmanı yok (çok GB'lık G/Ç daha hızlı); boş alan harici "emulated" ile aynı havuzdur.
+    fun workspace(ctx: Context): File = File(ctx.filesDir, "local").apply { mkdirs() }
+
+    fun freeBytes(ctx: Context): Long = StatFs(workspace(ctx).path).availableBytes
+
+    fun workspaceBytes(ctx: Context): Long = workspace(ctx).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    fun clearWorkspace(ctx: Context) {
+        if (_ui.value.busy) return
+        File(workspace(ctx), "builds").deleteRecursively()
+        File(workspace(ctx), "bloat").deleteRecursively()
+        _ui.value = Ui()
+    }
+
+    fun fail(msg: String) { _ui.value = Ui(Phase.Failed, msg) }
+
+    fun start(ctx: Context, form: Form) {
+        if (_ui.value.busy) return
+        val app = ctx.applicationContext
+        _log.value = emptyList()
+        cancelRequested = false
+        stage = 0; step = 0; stepTitle = ""; lastError = null; result = null
+        _ui.value = Ui(Phase.Running, "Hazırlanıyor…")
+        job = scope.launch {
+            try {
+                pipeline(app, form)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _ui.value = Ui(Phase.Failed, e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    fun cancel() {
+        if (!_ui.value.busy) return
+        cancelRequested = true
+        cancelFlag?.writeText("1")
+        _ui.update { it.copy(message = "İptal ediliyor…") }
+    }
+
+    private fun pipeline(app: Context, form: Form) {
+        val nativeDir = app.applicationInfo.nativeLibraryDir
+        for (name in listOf("libotaripper.so", "liblpmake.so")) {
+            if (!File(nativeDir, name).isFile) {
+                error("APK'da $name yok. Bu mod yalnızca arm64 cihazlarda ve araçlarla derlenmiş APK'da çalışır.")
+            }
+        }
+        val ws = workspace(app)
+        val free = freeBytes(app)
+        if (free < 6 * GB) {
+            error("Boş alan çok az (${"%.1f".format(free / 1e9)} GB). Tam build OTA boyutunun yaklaşık 4 katı alan ister.")
+        }
+
+        setMessage("Build dosyaları hazırlanıyor…")
+        val root = RepoBundle.ensure(app)
+        val cancel = File(app.cacheDir, "local-cancel.flag").also { it.delete() }
+        cancelFlag = cancel
+        if (cancelRequested) { _ui.value = Ui(Phase.Idle, "İptal edildi."); return }
+
+        val bloat = File(ws, "bloat")
+        val out = File(ws, "builds")
+        val common = listOf("--device", form.device, "--kind", form.kind, "--region", form.region, "--cancel", cancel.path)
+
+        // Aşama 0: bloat dosyalarını indir ve doğrula (önbelleğe alınır, tekrar indirilmez).
+        stage = 0
+        if (!finish(py(app, root, nativeDir, listOf("--download-bloat", "--bloat-dir", bloat.path) + common))) return
+
+        // Aşama 1: OTA'yı indir, partition'ları çıkar, süper imajı ve paketi oluştur.
+        stage = 1; step = 0; stepTitle = ""
+        val args = mutableListOf("--bloat-dir", bloat.path, "--output", out.path, "--ota", form.otaUrl)
+        if (form.baseOtaUrl.isNotBlank()) args += listOf("--base", form.baseOtaUrl)
+        if (form.device == Catalog.X9U) args += if (form.abl == "yes") "--vulnerable-abl" else "--stock-abl"
+        if (!finish(py(app, root, nativeDir, args + common))) return
+
+        val r = result ?: error("Build bitti ama sonuç dosyası bildirilmedi. Günlüğe bakın.")
+        val path = r.optString("zip").ifEmpty { r.optString("folder") }
+        _ui.value = Ui(Phase.Done, "Hazır. Paket oluşturuldu.", resultPath = path)
+    }
+
+    /** Aşama çıkış kodunu değerlendirir; devam edilebiliyorsa true döner. */
+    private fun finish(code: Int): Boolean {
+        when {
+            code == 0 && !cancelRequested -> return true
+            code == 130 || cancelRequested -> _ui.value = Ui(Phase.Idle, "İptal edildi.")
+            else -> _ui.value = Ui(Phase.Failed, lastError ?: "Build başarısız (kod $code). Günlüğe bakın.")
+        }
+        return false
+    }
+
+    private fun py(app: Context, root: File, nativeDir: String, argv: List<String>): Int {
+        if (!Python.isStarted()) Python.start(AndroidPlatform(app))
+        return Python.getInstance().getModule("android_entry")
+            .callAttr("run", root.path, nativeDir, ArrayList(argv), LogSink(::handleLine))
+            .toInt()
+    }
+
+    private fun setMessage(msg: String) = _ui.update { it.copy(message = msg) }
+
+    private fun overall(download: Float?): Float? {
+        if (stage == 0) return null                       // bloat: dosya sayısı çok, belirsiz ilerleme
+        val s = (step - 1).coerceAtLeast(0)
+        return 0.05f + 0.95f * ((s + (if (step == 1) download ?: 0f else 0f)) / 5f)
+    }
+
+    private fun handleLine(line: String) {
+        when {
+            line.startsWith("@@DL ") -> {
+                val p = line.split(" ", limit = 4)
+                val done = p.getOrNull(1)?.toLongOrNull() ?: return
+                val total = p.getOrNull(2)?.toLongOrNull() ?: 0L
+                val fraction = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
+                val label = if (stage == 0) "Bloat indiriliyor" else "OTA indiriliyor"
+                val size = if (total > 0) "${"%.2f".format(done / 1e9)} / ${"%.2f".format(total / 1e9)} GB"
+                else "${"%.2f".format(done / 1e9)} GB"
+                _ui.update { it.copy(message = "$label · $size", progress = overall(fraction)) }
+            }
+            line.startsWith("@@RESULT ") -> result = runCatching { JSONObject(line.removePrefix("@@RESULT ")) }.getOrNull()
+            line.startsWith("@@") -> Unit
+            else -> {
+                if (line.isNotBlank()) _log.update { (it + line).takeLast(300) }
+                val m = STEP.matchEntire(line)
+                if (m != null) {
+                    step = m.groupValues[1].toInt()
+                    stepTitle = m.groupValues[2]
+                    val prefix = if (stage == 0) "Bloat" else "Build"
+                    _ui.update { it.copy(message = "$prefix · Adım $step/5 · $stepTitle", progress = overall(null)) }
+                } else if (line.startsWith("ERROR:")) {
+                    lastError = line.removePrefix("ERROR:").trim()
+                }
+            }
+        }
+    }
+
+    private val STEP = Regex("""STEP (\d)/5 • (.*)""")
+}

@@ -2,6 +2,15 @@ name: Android APK
 
 on:
   workflow_dispatch:
+    inputs:
+      source_repo:
+        description: "Cihazda build için paketlenecek Flasher_Builder deposu (git URL)"
+        required: false
+        default: "https://github.com/koaaN/Flasher_Builder.git"
+      source_ref:
+        description: "Branch / tag"
+        required: false
+        default: "main"
   push:
     tags: ["v*"]
 
@@ -11,11 +20,23 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SOURCE_REPO: ${{ inputs.source_repo || 'https://github.com/koaaN/Flasher_Builder.git' }}
+      SOURCE_REF: ${{ inputs.source_ref || 'main' }}
     steps:
       - uses: actions/checkout@v4
 
+      # Chaquopy, uygulamanın Python sürümüyle (3.12) aynı Python'u derleme makinesinde ister.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: ARM64 araçlarını getir (SHA-256 doğrulamalı)
         run: bash tools/fetch_arm64_tools.sh
+
+      - name: Flasher_Builder kaynağını paketle (cihazda build için)
+        run: python tools/bundle_repo.py --repo "$SOURCE_REPO" --ref "$SOURCE_REF"
 
       - uses: actions/setup-java@v4
         with:
