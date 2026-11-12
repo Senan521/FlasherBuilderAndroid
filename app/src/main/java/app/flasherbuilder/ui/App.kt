@@ -80,6 +80,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.flasherbuilder.data.CloudViewModel
 import app.flasherbuilder.data.LocalExport
 import app.flasherbuilder.data.LocalEngine
+import app.flasherbuilder.data.LocalInbox
 import java.io.File
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -262,6 +263,9 @@ fun LocalScreen(vm: CloudViewModel, onBack: () -> Unit) {
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var probes by remember { mutableStateOf<List<NativeTools.Probe>?>(null) }
 
+    // Seçilen dosya build sırasında taşınır; durum her değişimde diskten yenilenir.
+    LaunchedEffect(ui.phase) { vm.refreshStaged() }
+
     // Boş alan / çalışma alanı boyutu: ekran açılınca ve her build durumu değişince yenilenir.
     LaunchedEffect(ui.phase, exportProgress == null) {
         withContext(Dispatchers.IO) {
@@ -304,7 +308,7 @@ fun LocalScreen(vm: CloudViewModel, onBack: () -> Unit) {
                 }
             }
 
-            BuildForm(vm, enabled = !ui.busy)
+            BuildForm(vm, enabled = !ui.busy, local = true)
             StatusCard(ui)
 
             if (log.isNotEmpty()) {
@@ -353,7 +357,7 @@ fun LocalScreen(vm: CloudViewModel, onBack: () -> Unit) {
             }
 
             OutlinedButton(
-                onClick = { LocalEngine.clearWorkspace(ctx); exportMessage = null },
+                onClick = { LocalEngine.clearWorkspace(ctx); vm.refreshStaged(); exportMessage = null },
                 enabled = !ui.busy && exportProgress == null && workGb > 0.0,
                 modifier = fm,
             ) { Text("Çalışma alanını temizle (${"%.1f".format(workGb)} GB)") }
@@ -408,20 +412,40 @@ fun SettingsScreen(vm: CloudViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun BuildForm(vm: CloudViewModel, enabled: Boolean) {
+private fun BuildForm(vm: CloudViewModel, enabled: Boolean, local: Boolean = false) {
     val form = vm.form
     val fm = Modifier.fillMaxWidth()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Dropdown("Cihaz", form.device, vm.catalog.map { it.name }, enabled, vm::selectDevice)
         Dropdown("Flasher türü", form.kind, vm.currentDevice?.types?.map { it.kind }.orEmpty(), enabled, vm::selectKind)
         Dropdown("Bölge", form.region, vm.currentType?.regions?.map { it.region }.orEmpty(), enabled, vm::selectRegion)
-        OutlinedTextField(form.otaUrl, { vm.saveForm(form.copy(otaUrl = it.trim())) }, fm,
-            enabled = enabled, label = { Text("Tam OTA ZIP bağlantısı") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-        if (vm.needsBase) {
-            OutlinedTextField(form.baseOtaUrl, { vm.saveForm(form.copy(baseOtaUrl = it.trim())) }, fm,
-                enabled = enabled, label = { Text("BASE OTA ZIP bağlantısı (Ace 6 COS)") },
+        if (local) {
+            SourceField(
+                label = "Tam OTA ZIP bağlantısı", role = "OTA", url = form.otaUrl,
+                onUrl = { vm.saveForm(form.copy(otaUrl = it.trim())) },
+                staged = vm.otaFile, vm = vm, enabled = enabled,
+            )
+            if (vm.needsBase) {
+                SourceField(
+                    label = "BASE OTA ZIP bağlantısı (Ace 6 COS)", role = "BASE", url = form.baseOtaUrl,
+                    onUrl = { vm.saveForm(form.copy(baseOtaUrl = it.trim())) },
+                    staged = vm.baseFile, vm = vm, enabled = enabled,
+                )
+            }
+            vm.stageProgress?.let { p ->
+                Text("Dosya kopyalanıyor… %${(p * 100).toInt()}", style = MaterialTheme.typography.bodySmall)
+                LinearProgressIndicator(progress = { p }, modifier = fm)
+            }
+            vm.stageError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        } else {
+            OutlinedTextField(form.otaUrl, { vm.saveForm(form.copy(otaUrl = it.trim())) }, fm,
+                enabled = enabled, label = { Text("Tam OTA ZIP bağlantısı") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            if (vm.needsBase) {
+                OutlinedTextField(form.baseOtaUrl, { vm.saveForm(form.copy(baseOtaUrl = it.trim())) }, fm,
+                    enabled = enabled, label = { Text("BASE OTA ZIP bağlantısı (Ace 6 COS)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            }
         }
         if (vm.needsAbl) {
             Text("Zafiyetli ABL (16.0.6) paketlensin mi?", style = MaterialTheme.typography.titleSmall)
@@ -437,6 +461,43 @@ private fun BuildForm(vm: CloudViewModel, enabled: Boolean) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SourceField(
+    label: String, role: String, url: String, onUrl: (String) -> Unit,
+    staged: LocalInbox.Staged?, vm: CloudViewModel, enabled: Boolean,
+) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.stageFile(role, uri)
+    }
+    val fm = Modifier.fillMaxWidth()
+    if (staged != null) {
+        ElevatedCard(fm) {
+            Row(
+                Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("$role dosyası seçildi", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "${staged.name} · ${"%.2f".format(staged.bytes / 1e9)} GB",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onClick = { vm.clearStaged(role) }, enabled = enabled) { Text("Kaldır") }
+            }
+        }
+    } else {
+        OutlinedTextField(url, onUrl, fm, enabled = enabled, label = { Text(label) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        OutlinedButton(
+            onClick = { picker.launch(arrayOf("*/*")) },
+            enabled = enabled && vm.stageProgress == null,
+            modifier = fm,
+        ) { Text("veya cihazdan $role dosyası seç") }
     }
 }
 

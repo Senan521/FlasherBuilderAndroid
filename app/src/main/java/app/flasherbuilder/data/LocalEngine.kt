@@ -58,12 +58,13 @@ object LocalEngine {
         if (_ui.value.busy) return
         File(workspace(ctx), "builds").deleteRecursively()
         File(workspace(ctx), "bloat").deleteRecursively()
+        LocalInbox.clear(ctx)
         _ui.value = Ui()
     }
 
     fun fail(msg: String) { _ui.value = Ui(Phase.Failed, msg) }
 
-    fun start(ctx: Context, form: Form) {
+    fun start(ctx: Context, form: Form, ota: String, base: String) {
         if (_ui.value.busy) return
         val app = ctx.applicationContext
         _log.value = emptyList()
@@ -72,7 +73,7 @@ object LocalEngine {
         _ui.value = Ui(Phase.Running, "Hazırlanıyor…")
         job = scope.launch {
             try {
-                pipeline(app, form)
+                pipeline(app, form, ota, base)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -88,7 +89,7 @@ object LocalEngine {
         _ui.update { it.copy(message = "İptal ediliyor…") }
     }
 
-    private fun pipeline(app: Context, form: Form) {
+    private fun pipeline(app: Context, form: Form, ota: String, base: String) {
         val nativeDir = app.applicationInfo.nativeLibraryDir
         for (name in listOf("libotaripper.so", "liblpmake.so")) {
             if (!File(nativeDir, name).isFile) {
@@ -117,8 +118,8 @@ object LocalEngine {
 
         // Aşama 1: OTA'yı indir, partition'ları çıkar, süper imajı ve paketi oluştur.
         stage = 1; step = 0; stepTitle = ""
-        val args = mutableListOf("--bloat-dir", bloat.path, "--output", out.path, "--ota", form.otaUrl)
-        if (form.baseOtaUrl.isNotBlank()) args += listOf("--base", form.baseOtaUrl)
+        val args = mutableListOf("--bloat-dir", bloat.path, "--output", out.path, "--ota", ota)
+        if (base.isNotBlank()) args += listOf("--base", base)
         if (form.device == Catalog.X9U) args += if (form.abl == "yes") "--vulnerable-abl" else "--stock-abl"
         if (!finish(py(app, root, nativeDir, args + common))) return
 
