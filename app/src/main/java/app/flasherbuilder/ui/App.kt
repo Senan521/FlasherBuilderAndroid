@@ -338,6 +338,8 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
         }
         vm.stageError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
+        OdmSection(vm, enabled)
+
         if (vm.needsAbl) {
             Text(stringResource(R.string.abl_question), style = MaterialTheme.typography.titleSmall)
             val choices = listOf("yes" to stringResource(R.string.yes), "no" to stringResource(R.string.no))
@@ -352,6 +354,42 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
                 }
             }
         }
+    }
+}
+
+/** İsteğe bağlı: paketteki odm.img yerine kullanıcının seçtiği odm.img konur. */
+@Composable
+private fun OdmSection(vm: MainViewModel, enabled: Boolean) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.stageFile("ODM", uri)
+    }
+    val fm = Modifier.fillMaxWidth()
+    val staged = vm.odmFile
+    Text(stringResource(R.string.odm_title), style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.odm_hint), style = MaterialTheme.typography.bodySmall)
+    if (staged != null) {
+        ElevatedCard(fm) {
+            Row(
+                Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.odm_selected), style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "${staged.name} · ${"%.1f".format(staged.bytes / 1e6)} MB",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onClick = { vm.clearStaged("ODM") }, enabled = enabled) { Text(stringResource(R.string.remove)) }
+            }
+        }
+    } else {
+        OutlinedButton(
+            onClick = { picker.launch(arrayOf("*/*")) },
+            enabled = enabled && vm.stageProgress == null,
+            modifier = fm,
+        ) { Text(stringResource(R.string.odm_pick)) }
     }
 }
 

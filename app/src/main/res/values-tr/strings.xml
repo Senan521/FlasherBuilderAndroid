@@ -68,4 +68,9 @@
     <string name="ch_done">Build sonucu</string>
     <string name="notif_done">Build tamamlandı</string>
     <string name="notif_failed">Build başarısız</string>
+    <string name="odm_title">Özel odm.img (isteğe bağlı)</string>
+    <string name="odm_hint">Oluşturulan paketteki ODM\'nin yerine geçer; örn. kamera sorununu gidermek için başka bir ROM\'dan alınan ODM. Boş bırakırsanız ROM\'un kendi ODM\'si kullanılır.</string>
+    <string name="odm_pick">odm.img seç</string>
+    <string name="odm_selected">Özel odm.img seçildi</string>
+    <string name="err_not_img">Seçilen dosya bir Android bölüm imajı değil (sparse, erofs veya ext4). ROM\'dan çıkarılmış odm.img dosyasını seçin.</string>
 </resources>

@@ -66,7 +66,7 @@ object LocalEngine {
 
     fun fail(msg: String) { _ui.value = Ui(Phase.Failed, msg) }
 
-    fun start(ctx: Context, form: Form, ota: String, base: String) {
+    fun start(ctx: Context, form: Form, ota: String, base: String, customOdm: String? = null) {
         if (_ui.value.busy) return
         val app = ctx.applicationContext
         _log.value = emptyList()
@@ -75,7 +75,7 @@ object LocalEngine {
         _ui.value = Ui(Phase.Running, Str.get(R.string.local_preparing))
         job = scope.launch {
             try {
-                pipeline(app, form, ota, base)
+                pipeline(app, form, ota, base, customOdm)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -91,7 +91,7 @@ object LocalEngine {
         _ui.update { it.copy(message = Str.get(R.string.local_cancelling)) }
     }
 
-    private fun pipeline(app: Context, form: Form, ota: String, base: String) {
+    private fun pipeline(app: Context, form: Form, ota: String, base: String, customOdm: String?) {
         val nativeDir = app.applicationInfo.nativeLibraryDir
         for (name in listOf("libotaripper.so", "liblpmake.so")) {
             if (!File(nativeDir, name).isFile) {
@@ -122,6 +122,7 @@ object LocalEngine {
         stage = 1; step = 0; stepTitle = ""
         val args = mutableListOf("--bloat-dir", bloat.path, "--output", out.path, "--ota", ota)
         if (base.isNotBlank()) args += listOf("--base", base)
+        if (customOdm != null) args += listOf("--custom-odm", customOdm)
         if (form.device == Catalog.X9U) args += if (form.abl == "yes") "--vulnerable-abl" else "--stock-abl"
         if (!finish(py(app, root, nativeDir, args + common))) return
 
