@@ -1,5 +1,7 @@
 package app.flasherbuilder.data
 
+import app.flasherbuilder.R
+import app.flasherbuilder.Str
 import android.content.Context
 import android.os.StatFs
 import com.chaquo.python.Python
@@ -70,7 +72,7 @@ object LocalEngine {
         _log.value = emptyList()
         cancelRequested = false
         stage = 0; step = 0; stepTitle = ""; lastError = null; result = null
-        _ui.value = Ui(Phase.Running, "Hazırlanıyor…")
+        _ui.value = Ui(Phase.Running, Str.get(R.string.local_preparing))
         job = scope.launch {
             try {
                 pipeline(app, form, ota, base)
@@ -86,27 +88,27 @@ object LocalEngine {
         if (!_ui.value.busy) return
         cancelRequested = true
         cancelFlag?.writeText("1")
-        _ui.update { it.copy(message = "İptal ediliyor…") }
+        _ui.update { it.copy(message = Str.get(R.string.local_cancelling)) }
     }
 
     private fun pipeline(app: Context, form: Form, ota: String, base: String) {
         val nativeDir = app.applicationInfo.nativeLibraryDir
         for (name in listOf("libotaripper.so", "liblpmake.so")) {
             if (!File(nativeDir, name).isFile) {
-                error("APK'da $name yok. Bu mod yalnızca arm64 cihazlarda ve araçlarla derlenmiş APK'da çalışır.")
+                error(Str.get(R.string.err_tool_missing, name))
             }
         }
         val ws = workspace(app)
         val free = freeBytes(app)
         if (free < 6 * GB) {
-            error("Boş alan çok az (${"%.1f".format(free / 1e9)} GB). Tam build OTA boyutunun yaklaşık 4 katı alan ister.")
+            error(Str.get(R.string.err_low_space_local, "%.1f".format(free / 1e9)))
         }
 
-        setMessage("Build dosyaları hazırlanıyor…")
+        setMessage(Str.get(R.string.local_unpacking))
         val root = RepoBundle.ensure(app)
         val cancel = File(app.cacheDir, "local-cancel.flag").also { it.delete() }
         cancelFlag = cancel
-        if (cancelRequested) { _ui.value = Ui(Phase.Idle, "İptal edildi."); return }
+        if (cancelRequested) { _ui.value = Ui(Phase.Idle, Str.get(R.string.cancelled)); return }
 
         val bloat = File(ws, "bloat")
         val out = File(ws, "builds")
@@ -123,17 +125,17 @@ object LocalEngine {
         if (form.device == Catalog.X9U) args += if (form.abl == "yes") "--vulnerable-abl" else "--stock-abl"
         if (!finish(py(app, root, nativeDir, args + common))) return
 
-        val r = result ?: error("Build bitti ama sonuç dosyası bildirilmedi. Günlüğe bakın.")
+        val r = result ?: error(Str.get(R.string.err_no_result))
         val path = r.optString("zip").ifEmpty { r.optString("folder") }
-        _ui.value = Ui(Phase.Done, "Hazır. Paket oluşturuldu.", resultPath = path)
+        _ui.value = Ui(Phase.Done, Str.get(R.string.local_done), resultPath = path)
     }
 
     /** Aşama çıkış kodunu değerlendirir; devam edilebiliyorsa true döner. */
     private fun finish(code: Int): Boolean {
         when {
             code == 0 && !cancelRequested -> return true
-            code == 130 || cancelRequested -> _ui.value = Ui(Phase.Idle, "İptal edildi.")
-            else -> _ui.value = Ui(Phase.Failed, lastError ?: "Build başarısız (kod $code). Günlüğe bakın.")
+            code == 130 || cancelRequested -> _ui.value = Ui(Phase.Idle, Str.get(R.string.cancelled))
+            else -> _ui.value = Ui(Phase.Failed, lastError ?: Str.get(R.string.local_failed_code, code))
         }
         return false
     }
@@ -160,21 +162,22 @@ object LocalEngine {
                 val done = p.getOrNull(1)?.toLongOrNull() ?: return
                 val total = p.getOrNull(2)?.toLongOrNull() ?: 0L
                 val fraction = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
-                val label = if (stage == 0) "Bloat indiriliyor" else "OTA indiriliyor"
+                val label = Str.get(if (stage == 0) R.string.dl_bloat else R.string.dl_ota)
                 val size = if (total > 0) "${"%.2f".format(done / 1e9)} / ${"%.2f".format(total / 1e9)} GB"
                 else "${"%.2f".format(done / 1e9)} GB"
                 _ui.update { it.copy(message = "$label · $size", progress = overall(fraction)) }
             }
             line.startsWith("@@RESULT ") -> result = runCatching { JSONObject(line.removePrefix("@@RESULT ")) }.getOrNull()
             line.startsWith("@@") -> Unit
+            line.startsWith("Invalid sparse file format at header magic") -> Unit   // lpmake: ham imaj sparse değil, zararsız
             else -> {
-                if (line.isNotBlank()) _log.update { (it + line).takeLast(300) }
+                if (line.isNotBlank()) _log.update { (it + line).takeLast(500) }
                 val m = STEP.matchEntire(line)
                 if (m != null) {
                     step = m.groupValues[1].toInt()
                     stepTitle = m.groupValues[2]
-                    val prefix = if (stage == 0) "Bloat" else "Build"
-                    _ui.update { it.copy(message = "$prefix · Adım $step/5 · $stepTitle", progress = overall(null)) }
+                    val prefix = Str.get(if (stage == 0) R.string.stage_bloat else R.string.stage_build)
+                    _ui.update { it.copy(message = Str.get(R.string.step_fmt, prefix, step, stepTitle), progress = overall(null)) }
                 } else if (line.startsWith("ERROR:")) {
                     lastError = line.removePrefix("ERROR:").trim()
                 }

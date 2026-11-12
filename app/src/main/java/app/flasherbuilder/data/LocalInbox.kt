@@ -1,5 +1,7 @@
 package app.flasherbuilder.data
 
+import app.flasherbuilder.R
+import app.flasherbuilder.Str
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -45,14 +47,11 @@ object LocalInbox {
                 }
             val free = LocalEngine.freeBytes(ctx)
             if (size > 0 && free < size + 1_000_000_000L) {
-                throw IOException(
-                    "Yetersiz alan: dosya ${"%.1f".format(size / 1e9)} GB, boş ${"%.1f".format(free / 1e9)} GB. " +
-                        "Çalışma alanını temizleyin ya da bağlantıyla indirin."
-                )
+                throw IOException(Str.get(R.string.err_inbox_space, "%.1f".format(size / 1e9), "%.1f".format(free / 1e9)))
             }
             val dest = File(dir(ctx), "$role.zip").also { it.delete() }
             try {
-                val input = resolver.openInputStream(uri) ?: throw IOException("Dosya açılamadı.")
+                val input = resolver.openInputStream(uri) ?: throw IOException(Str.get(R.string.err_open_file))
                 input.use { src ->
                     dest.outputStream().use { out ->
                         val buf = ByteArray(1 shl 20)
@@ -64,7 +63,7 @@ object LocalInbox {
                             if (first) {
                                 first = false
                                 if (n < 2 || buf[0] != 'P'.code.toByte() || buf[1] != 'K'.code.toByte()) {
-                                    throw IOException("Seçilen dosya bir ZIP değil. Tam OTA ZIP dosyasını seçin.")
+                                    throw IOException(Str.get(R.string.err_not_zip))
                                 }
                             }
                             out.write(buf, 0, n)

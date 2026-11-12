@@ -1,5 +1,7 @@
 package app.flasherbuilder.data
 
+import app.flasherbuilder.R
+import app.flasherbuilder.Str
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,12 +28,12 @@ object NativeTools {
     }
 
     private fun run(name: String, exe: File, arg: String): Probe {
-        if (!exe.isFile) return Probe(name, false, "Dosya yok (arm64 cihaz mı? APK araçlarla derlendi mi?)")
+        if (!exe.isFile) return Probe(name, false, Str.get(R.string.probe_missing))
         return try {
             val p = ProcessBuilder(exe.path, arg).redirectErrorStream(true).start()
             val out = p.inputStream.bufferedReader().use { it.readLine().orEmpty() }
             if (!p.waitFor(10, TimeUnit.SECONDS)) p.destroyForcibly()
-            Probe(name, out.isNotBlank(), out.ifBlank { "Çıktı yok" })
+            Probe(name, out.isNotBlank(), out.ifBlank { Str.get(R.string.probe_no_output) })
         } catch (e: Exception) {
             Probe(name, false, e.message ?: e.javaClass.simpleName)
         }

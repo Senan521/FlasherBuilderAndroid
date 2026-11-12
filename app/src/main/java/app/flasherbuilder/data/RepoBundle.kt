@@ -1,5 +1,7 @@
 package app.flasherbuilder.data
 
+import app.flasherbuilder.R
+import app.flasherbuilder.Str
 import android.content.Context
 import java.io.File
 import java.io.IOException
@@ -24,7 +26,7 @@ object RepoBundle {
                 var e = zin.nextEntry
                 while (e != null) {
                     val out = File(root, e.name).canonicalFile
-                    if (!out.path.startsWith(root.path + File.separator)) throw IOException("Geçersiz yol: ${e.name}")
+                    if (!out.path.startsWith(root.path + File.separator)) throw IOException(Str.get(R.string.err_bad_path, e.name))
                     if (e.isDirectory) {
                         out.mkdirs()
                     } else {
