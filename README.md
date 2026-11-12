@@ -2,8 +2,8 @@
 
 Material 3 Expressive arayüzlü Android uygulaması.
 - **Bulutta Build** (çalışır durumda tasarlandı): GitHub Actions'ta derler, bitmiş paketi telefona indirir.
-- **Cihazda Build** (temel hazır): arm64 `otaripper` + `lpmake` APK'ya gömülü, "Yerel araçları denetle" ile
-  cihazda çalıştıkları doğrulanır. Python build hattının cihaza taşınması sonraki aşamadır.
+- **Cihazda Build**: Flasher_Builder'ın Python backend'i Chaquopy ile uygulamanın içinde çalışır;
+  `otaripper` ve `lpmake` APK'daki arm64 binary'leridir. İnternet + yeterli boş alan yeterli, GitHub hesabı gerekmez.
 
 ## 1) APK'yı GitHub'da derleme (Termux)
 ```bash
@@ -58,7 +58,18 @@ Repo yeni cihaz ekleyince fork klasöründe: `python3 /yol/tools/export_catalog.
 - lpmake (AOSP, Apache-2.0) — MIO-KITCHEN deposundaki sabit commit'ten statik arm64 binary
 Binary'ler Git'e eklenmez (`.gitignore`), APK içine `lib*.so` adıyla girer.
 
-## Cihazda Build için kalan iş (Faz 2)
-Python worker'ın Android'e taşınması: Chaquopy; `sys.executable` ile alt süreç başlatan yardımcıların
-süreç içi çalıştırılması; `aria2c/curl` yerine saf Python indirme; `x86_64` platform kontrolünün esnetilmesi;
-araç yollarının `NativeTools`'a yönlendirilmesi.
+## Cihazda Build nasıl çalışır
+- CI, `tools/bundle_repo.py` ile Flasher_Builder'ın gerekli kısmını `repo.zip` olarak APK'ya gömer
+  (varsayılan: koaaN/Flasher_Builder `main`; fork için: Actions → "Run workflow" → `source_repo`).
+- `app/src/main/python/android_entry.py` upstream kodu değiştirmeden uyarlar: yerel araçlar APK'dan,
+  yardımcı süreçler uygulama içinde, indirmeler urllib ile (kaldığı yerden devam eder), çıktı uygulamaya akar.
+- Akış: bloat indir → OTA indir → partition çıkar → lpmake → ZIP + SHA-256 → "İndirilenler'e kaydet".
+- Çalışma alanı uygulamanın dahili depolamasındadır; "Çalışma alanını temizle" ile boşaltılır.
+- Disk: OTA boyutunun ~4 katı (8 GB OTA ≈ 32 GB). Eksikse backend net bir hata verir.
+
+İlk denemede önce "Yerel araçları denetle" düğmesine basın (✔ otaripper, ✔ lpmake görmelisiniz).
+
+## Test durumu
+Python tarafı bu ortamda test edildi: upstream'in kendi self-test'i (tüm build türleri) shim üzerinden, APK ile aynı
+dosya düzeninde ve `lib*.so` adlı araçlarla geçti; indirici (devam etme, 403, sağlama toplamı, iptal) ve iptal akışı da.
+Test EDİLEMEYEN: gerçek ARM64 cihazda çalışma (bionic, SELinux, Chaquopy) ve Gradle derlemesi.

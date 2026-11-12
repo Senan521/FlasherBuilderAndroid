@@ -78,6 +78,15 @@ import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.flasherbuilder.data.CloudViewModel
+import app.flasherbuilder.data.LocalExport
+import app.flasherbuilder.data.LocalEngine
+import java.io.File
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.OutlinedButton
 import app.flasherbuilder.data.NativeTools
 import app.flasherbuilder.data.Phase
 import app.flasherbuilder.data.Ui
@@ -93,7 +102,7 @@ fun App(vm: CloudViewModel = viewModel()) {
     when (screen) {
         Screen.Home -> HomeScreen({ screen = Screen.Cloud }, { screen = Screen.Local })
         Screen.Cloud -> CloudScreen(vm, { screen = Screen.Home }, { screen = Screen.Settings })
-        Screen.Local -> LocalScreen { screen = Screen.Home }
+        Screen.Local -> LocalScreen(vm) { screen = Screen.Home }
         Screen.Settings -> SettingsScreen(vm) { screen = Screen.Cloud }
     }
 }
@@ -128,11 +137,11 @@ fun HomeScreen(onCloud: () -> Unit, onLocal: () -> Unit) {
             )
             ModeCard(
                 title = "Cihazda Build",
-                body = "Her şey telefonda çalışır. 40–80 GB boş alan ve arm64 araçlar gerekir.",
+                body = "Her şey telefonda çalışır (arm64). OTA boyutunun ~4 katı boş alan gerekir; bulut gerekmez.",
                 icon = Icons.Filled.PhoneAndroid,
                 badge = MaterialShapes.Sunny,
                 container = MaterialTheme.colorScheme.secondaryContainer,
-                tag = "Yakında",
+                tag = "Deneysel",
                 onClick = onLocal,
             )
         }
@@ -165,7 +174,6 @@ private fun ModeCard(
 
 @Composable
 fun CloudScreen(vm: CloudViewModel, onBack: () -> Unit, onSettings: () -> Unit) {
-    val form = vm.form
     val ui by vm.ui.collectAsState()
     val ctx = LocalContext.current
     // Bildirim izni (Android 13+): reddedilse de build başlar; yalnızca bildirim görünmez.
@@ -189,31 +197,7 @@ fun CloudScreen(vm: CloudViewModel, onBack: () -> Unit, onSettings: () -> Unit) 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val fm = Modifier.fillMaxWidth()
-            Dropdown("Cihaz", form.device, vm.catalog.map { it.name }, !ui.busy, vm::selectDevice)
-            Dropdown("Flasher türü", form.kind, vm.currentDevice?.types?.map { it.kind }.orEmpty(), !ui.busy, vm::selectKind)
-            Dropdown("Bölge", form.region, vm.currentType?.regions?.map { it.region }.orEmpty(), !ui.busy, vm::selectRegion)
-            OutlinedTextField(form.otaUrl, { vm.saveForm(form.copy(otaUrl = it.trim())) }, fm,
-                enabled = !ui.busy, label = { Text("Tam OTA ZIP bağlantısı") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-            if (vm.needsBase) {
-                OutlinedTextField(form.baseOtaUrl, { vm.saveForm(form.copy(baseOtaUrl = it.trim())) }, fm,
-                    enabled = !ui.busy, label = { Text("BASE OTA ZIP bağlantısı (Ace 6 COS)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-            }
-            if (vm.needsAbl) {
-                Text("Zafiyetli ABL (16.0.6) paketlensin mi?", style = MaterialTheme.typography.titleSmall)
-                val choices = listOf("yes" to "Evet", "no" to "Hayır")
-                SingleChoiceSegmentedButtonRow(fm) {
-                    choices.forEachIndexed { i, (value, label) ->
-                        SegmentedButton(
-                            selected = form.abl == value,
-                            onClick = { vm.saveForm(form.copy(abl = value)) },
-                            shape = SegmentedButtonDefaults.itemShape(i, choices.size),
-                            enabled = !ui.busy,
-                        ) { Text(label) }
-                    }
-                }
-            }
+            BuildForm(vm, enabled = !ui.busy)
 
             StatusCard(ui)
 
@@ -249,6 +233,8 @@ private fun StatusCard(ui: Ui) {
             when {
                 ui.phase == Phase.Downloading && p != null ->
                     LinearWavyProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
+                ui.phase == Phase.Running && p != null ->
+                    LinearWavyProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
                 ui.phase == Phase.Queued || ui.phase == Phase.Running ->
                     LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
@@ -262,14 +248,36 @@ private fun StatusCard(ui: Ui) {
     }
 }
 
-// ───────────────────────── Yerel ekran (yer tutucu) ─────────────────────────
+// ───────────────────────── Cihazda build ─────────────────────────
 
 @Composable
-fun LocalScreen(onBack: () -> Unit) {
+fun LocalScreen(vm: CloudViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val freeGb = remember {
-        (ctx.getExternalFilesDir(null)?.let { StatFs(it.path).availableBytes } ?: 0L) / 1e9
+    val scope = rememberCoroutineScope()
+    val ui by LocalEngine.ui.collectAsState()
+    val log by LocalEngine.log.collectAsState()
+    var freeGb by remember { mutableStateOf(0.0) }
+    var workGb by remember { mutableStateOf(0.0) }
+    var exportProgress by remember { mutableStateOf<Float?>(null) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
+    var probes by remember { mutableStateOf<List<NativeTools.Probe>?>(null) }
+
+    // Boş alan / çalışma alanı boyutu: ekran açılınca ve her build durumu değişince yenilenir.
+    LaunchedEffect(ui.phase, exportProgress == null) {
+        withContext(Dispatchers.IO) {
+            freeGb = LocalEngine.freeBytes(ctx) / 1e9
+            workGb = LocalEngine.workspaceBytes(ctx) / 1e9
+        }
     }
+
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.startLocal() }
+    val onStart = {
+        exportMessage = null
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.startLocal()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -278,28 +286,89 @@ fun LocalScreen(onBack: () -> Unit) {
             )
         },
     ) { pad ->
-        Column(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Boş alan: ${"%.1f".format(freeGb)} GB", style = MaterialTheme.typography.titleLarge)
-            LinearProgressIndicator(progress = { (freeGb / 80.0).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            Text(
-                "Tam build için OTA boyutunun yaklaşık 4 katı boş alan gerekir (8 GB OTA ≈ 32 GB). " +
-                    "arm64 otaripper ve lpmake APK içinde hazır; Python build hattının cihaza taşınması sonraki aşama.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            val scope = rememberCoroutineScope()
-            var probes by remember { mutableStateOf<List<NativeTools.Probe>?>(null) }
-            FilledTonalButton(
-                onClick = { scope.launch { probes = NativeTools.probe(ctx) } },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Yerel araçları denetle") }
+        Column(
+            Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val fm = Modifier.fillMaxWidth()
+            ElevatedCard(fm) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Boş alan: ${"%.1f".format(freeGb)} GB  •  Çalışma alanı: ${"%.1f".format(workGb)} GB",
+                        style = MaterialTheme.typography.titleSmall)
+                    LinearProgressIndicator(progress = { (freeGb / 80.0).toFloat().coerceIn(0f, 1f) }, modifier = fm)
+                    Text(
+                        "Build, OTA boyutunun yaklaşık 4 katı boş alan ister (8 GB OTA ≈ 32 GB). Telefon şarjda ve " +
+                            "uygulama açık/bildirimde iken en güvenlisidir; işlem 10–40 dakika sürebilir.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            BuildForm(vm, enabled = !ui.busy)
+            StatusCard(ui)
+
+            if (log.isNotEmpty()) {
+                ElevatedCard(fm) {
+                    Text(
+                        log.takeLast(14).joinToString("\n"),
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 14,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            if (ui.busy) {
+                FilledTonalButton(onClick = vm::cancelLocal, modifier = fm) { Text("İptal") }
+            } else {
+                Button(onClick = onStart, modifier = fm) { Text("Build başlat") }
+            }
+
+            // Biten ZIP'i İndirilenler klasörüne kopyala (uygulama klasörü dosya yöneticilerinde gizli olabilir).
+            val zipPath = ui.resultPath
+            if (ui.phase == Phase.Done && zipPath != null && zipPath.endsWith(".zip")) {
+                val p = exportProgress
+                if (p != null) {
+                    LinearWavyProgressIndicator(progress = { p }, modifier = fm)
+                } else {
+                    Button(
+                        onClick = {
+                            exportProgress = 0f
+                            scope.launch {
+                                exportMessage = try {
+                                    "Kaydedildi: " + LocalExport.toDownloads(ctx, File(zipPath)) { exportProgress = it }
+                                } catch (e: Exception) {
+                                    "Kopyalanamadı: ${e.message}"
+                                } finally {
+                                    exportProgress = null
+                                }
+                            }
+                        },
+                        modifier = fm,
+                    ) { Text("İndirilenler'e kaydet") }
+                }
+                exportMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            }
+
+            OutlinedButton(
+                onClick = { LocalEngine.clearWorkspace(ctx); exportMessage = null },
+                enabled = !ui.busy && exportProgress == null && workGb > 0.0,
+                modifier = fm,
+            ) { Text("Çalışma alanını temizle (${"%.1f".format(workGb)} GB)") }
+
+            // Tanılama: yerel araçlar bu cihazda çalışıyor mu?
+            TextButton(onClick = { scope.launch { probes = NativeTools.probe(ctx) } }, modifier = fm) {
+                Text("Yerel araçları denetle")
+            }
             probes?.forEach { r ->
                 Text(
                     (if (r.ok) "✔ " else "✘ ") + r.name + ": " + r.detail,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = if (r.ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 )
             }
-            Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("Build (yakında)") }
         }
     }
 }
@@ -334,6 +403,39 @@ fun SettingsScreen(vm: CloudViewModel, onBack: () -> Unit) {
             OutlinedTextField(c.token, { c = c.copy(token = it) }, fm, singleLine = true,
                 visualTransformation = PasswordVisualTransformation(), label = { Text("Token") })
             Button(onClick = { vm.saveConn(c); onBack() }, modifier = fm) { Text("Kaydet") }
+        }
+    }
+}
+
+@Composable
+private fun BuildForm(vm: CloudViewModel, enabled: Boolean) {
+    val form = vm.form
+    val fm = Modifier.fillMaxWidth()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Dropdown("Cihaz", form.device, vm.catalog.map { it.name }, enabled, vm::selectDevice)
+        Dropdown("Flasher türü", form.kind, vm.currentDevice?.types?.map { it.kind }.orEmpty(), enabled, vm::selectKind)
+        Dropdown("Bölge", form.region, vm.currentType?.regions?.map { it.region }.orEmpty(), enabled, vm::selectRegion)
+        OutlinedTextField(form.otaUrl, { vm.saveForm(form.copy(otaUrl = it.trim())) }, fm,
+            enabled = enabled, label = { Text("Tam OTA ZIP bağlantısı") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        if (vm.needsBase) {
+            OutlinedTextField(form.baseOtaUrl, { vm.saveForm(form.copy(baseOtaUrl = it.trim())) }, fm,
+                enabled = enabled, label = { Text("BASE OTA ZIP bağlantısı (Ace 6 COS)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        }
+        if (vm.needsAbl) {
+            Text("Zafiyetli ABL (16.0.6) paketlensin mi?", style = MaterialTheme.typography.titleSmall)
+            val choices = listOf("yes" to "Evet", "no" to "Hayır")
+            SingleChoiceSegmentedButtonRow(fm) {
+                choices.forEachIndexed { i, (value, label) ->
+                    SegmentedButton(
+                        selected = form.abl == value,
+                        onClick = { vm.saveForm(form.copy(abl = value)) },
+                        shape = SegmentedButtonDefaults.itemShape(i, choices.size),
+                        enabled = enabled,
+                    ) { Text(label) }
+                }
+            }
         }
     }
 }

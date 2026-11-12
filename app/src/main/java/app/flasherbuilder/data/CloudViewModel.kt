@@ -47,8 +47,8 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectRegion(region: String) = saveForm(form.copy(region = region))
 
-    private fun problem(): String? = when {
-        !conn.isComplete() -> "Önce Ayarlar'dan repo ve token girin."
+    private fun problem(requireConn: Boolean = true): String? = when {
+        requireConn && !conn.isComplete() -> "Önce Ayarlar'dan repo ve token girin."
         currentType == null -> "Geçerli bir cihaz, tür ve bölge seçin."
         !form.otaUrl.startsWith("http") -> "Geçerli bir tam OTA ZIP bağlantısı girin."
         needsBase && !form.baseOtaUrl.startsWith("http") -> "Bu seçim için BASE OTA bağlantısı da gerekli."
@@ -59,19 +59,34 @@ class CloudViewModel(app: Application) : AndroidViewModel(app) {
     fun start() {
         problem()?.let { BuildEngine.fail(it); return }
         BuildEngine.start(getApplication(), conn, form)
-        launchService()
+        launchService(local = false)
     }
+
+    /** Cihazda build: GitHub bağlantısı gerekmez. */
+    fun startLocal() {
+        problem(requireConn = false)?.let { LocalEngine.fail(it); return }
+        LocalEngine.start(getApplication(), form)
+        launchService(local = true)
+    }
+
+    fun cancelLocal() = LocalEngine.cancel()
 
     fun resume() {
         if (!conn.isComplete()) { BuildEngine.fail("Önce Ayarlar'dan repo ve token girin."); return }
         BuildEngine.resume(getApplication(), conn)
-        launchService()
+        launchService(local = false)
     }
 
     fun cancel() = BuildEngine.cancel(getApplication())
 
-    private fun launchService() {
+    private fun launchService(local: Boolean) {
         val app = getApplication<Application>()
-        if (BuildEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
+        val busy = if (local) LocalEngine.ui.value.busy else BuildEngine.ui.value.busy
+        if (busy) {
+            app.startForegroundService(
+                Intent(app, BuildService::class.java)
+                    .putExtra(BuildService.EXTRA_MODE, if (local) BuildService.MODE_LOCAL else BuildService.MODE_CLOUD)
+            )
+        }
     }
 }

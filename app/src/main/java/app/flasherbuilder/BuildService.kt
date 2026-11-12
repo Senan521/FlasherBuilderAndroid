@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import app.flasherbuilder.data.BuildEngine
 import app.flasherbuilder.data.Phase
+import app.flasherbuilder.data.LocalEngine
 import app.flasherbuilder.data.Ui
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 class BuildService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var watcher: Job? = null
+    private var local = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val nm get() = getSystemService(NotificationManager::class.java)
 
@@ -40,13 +42,17 @@ class BuildService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_CANCEL) BuildEngine.cancel(applicationContext)
-        startForeground(NOTIF_PROGRESS, progressNotification(BuildEngine.ui.value),
+        intent?.getStringExtra(EXTRA_MODE)?.let { local = it == MODE_LOCAL }
+        val source = if (local) LocalEngine.ui else BuildEngine.ui
+        if (intent?.action == ACTION_CANCEL) {
+            if (local) LocalEngine.cancel() else BuildEngine.cancel(applicationContext)
+        }
+        startForeground(NOTIF_PROGRESS, progressNotification(source.value),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         acquireWakeLock()
         if (watcher == null) {
             watcher = scope.launch {
-                BuildEngine.ui.collect { ui ->
+                source.collect { ui ->
                     if (ui.busy) nm.notify(NOTIF_PROGRESS, progressNotification(ui)) else finish(ui)
                 }
             }
@@ -99,13 +105,14 @@ class BuildService : Service() {
                     null, "İptal",
                     PendingIntent.getService(
                         this, 1,
-                        Intent(this, BuildService::class.java).setAction(ACTION_CANCEL),
+                        Intent(this, BuildService::class.java).setAction(ACTION_CANCEL)
+                            .putExtra(EXTRA_MODE, if (local) MODE_LOCAL else MODE_CLOUD),
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 ).build()
             )
         val p = ui.progress
-        if (ui.phase == Phase.Downloading && p != null) b.setProgress(100, (p * 100).toInt(), false)
+        if (p != null && (ui.phase == Phase.Downloading || ui.phase == Phase.Running)) b.setProgress(100, (p * 100).toInt(), false)
         else b.setProgress(0, 0, true)
         return b.build()
     }
@@ -129,6 +136,9 @@ class BuildService : Service() {
 
     companion object {
         const val ACTION_CANCEL = "app.flasherbuilder.CANCEL"
+        const val EXTRA_MODE = "mode"
+        const val MODE_CLOUD = "cloud"
+        const val MODE_LOCAL = "local"
         private const val CH_PROGRESS = "progress"
         private const val CH_DONE = "done"
         private const val NOTIF_PROGRESS = 1

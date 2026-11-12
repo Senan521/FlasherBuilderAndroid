@@ -6,4 +6,5 @@ local.properties
 .idea/
 app/src/main/jniLibs/
 app/src/main/assets/licenses/
+app/src/main/assets/repo.zip
 FlasherBuilder-apk/
