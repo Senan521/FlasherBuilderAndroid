@@ -341,7 +341,11 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
         }
         vm.stageError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
-        ChangeImageSection(vm, enabled)
+        Row(fm, verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.img_toggle), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Switch(checked = vm.changeImage, onCheckedChange = vm::setChangeImage, enabled = enabled)
+        }
+        if (vm.changeImage) ChangeImageSection(vm, enabled)
 
         if (vm.needsAbl) {
             Text(stringResource(R.string.abl_question), style = MaterialTheme.typography.titleSmall)
@@ -370,7 +374,6 @@ private fun ChangeImageSection(vm: MainViewModel, enabled: Boolean) {
     val fm = Modifier.fillMaxWidth()
     val canAct = enabled && vm.stageProgress == null
 
-    Text(stringResource(R.string.img_title), style = MaterialTheme.typography.titleSmall)
     Text(stringResource(R.string.img_hint), style = MaterialTheme.typography.bodySmall)
 
     // Build'e eklenecek (ROM'dakinin yerine geçecek) imajlar
@@ -392,7 +395,7 @@ private fun ChangeImageSection(vm: MainViewModel, enabled: Boolean) {
     // OTA bağlantısından tarama
     OutlinedTextField(
         vm.form.imageUrl, { vm.saveForm(vm.form.copy(imageUrl = it.trim())) }, fm,
-        enabled = enabled, label = { Text(stringResource(R.string.img_link_label)) },
+        enabled = enabled, singleLine = true, label = { Text(stringResource(R.string.img_link_label)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
     )
     FilledTonalButton(
@@ -464,7 +467,7 @@ private fun SourceField(
             }
         }
     } else {
-        OutlinedTextField(url, onUrl, fm, enabled = enabled, label = { Text(label) },
+        OutlinedTextField(url, onUrl, fm, enabled = enabled, singleLine = true, label = { Text(label) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
         OutlinedButton(
             onClick = { picker.launch(arrayOf("*/*")) },
