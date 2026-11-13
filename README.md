@@ -9,7 +9,7 @@ Bilgisayara ihtiyaç duymadan, indirdiğiniz tam OTA ZIP'inden (ya da bağlantı
 - Tam OTA'dan partition'ları çıkarır, süper imajı oluşturur ve hazır flasher paketini (ZIP + SHA-256) verir.
 - Cihaz, flasher türü ve bölgeyi (EU, IN, GLO, CN…) listeden seçersiniz; geçerli kombinasyonlar hazırdır.
 - OTA'yı bağlantıyla indirebilir ya da telefonunuzdaki ZIP dosyasını seçebilirsiniz.
-- **İmaj değiştir (tüm cihazlarda):** Paketteki istediğiniz imajın yerine başka bir ROM'dan imaj koyabilirsiniz. OTA bağlantısını yapıştırıp *İmajları tara* deyin, listeden istediğiniz imajları (odm, boot, abl…) seçin; yalnızca seçilenler indirilir. Ya da cihazdan bir imaj dosyası seçin (dosya adı bölüm adı olmalı, ör. `odm.img`). Yalnızca cihazınızla uyumlu imajlar kullanın.
+- **İmaj değiştir (tüm cihazlarda, anahtarla açılır):** Paketteki istediğiniz imajın yerine başka bir ROM'dan imaj koyabilirsiniz. OTA bağlantısını yapıştırıp *İmajları tara* deyin, listeden istediğiniz imajları (odm, boot, abl…) seçin; yalnızca seçilenler indirilir. Ya da cihazdan bir imaj dosyası seçin (dosya adı bölüm adı olmalı, ör. `odm.img`). Yalnızca cihazınızla uyumlu imajlar kullanın.
 - Build bildirimde ilerler, ekran kapansa da sürer. Bitince paket **İndirilenler** klasörüne kaydedilir.
 - Türkçe ve İngilizce arayüz (Android 13+ için sağ üstte dil seçimi).
 
@@ -40,7 +40,7 @@ Ayrıca: [otaripper](https://github.com/syedinsaf/otaripper) (OTA çıkarma, sye
 **An Android app that builds firmware flasher packages for OnePlus / OPPO / Realme devices right on your phone — no PC needed.**
 Give it a full OTA ZIP (link or file), pick device / flasher type / region, and it produces the flasher package (ZIP + SHA-256).
 
-- **Change image (all devices):** replace any image in the package with one from another ROM. Paste an OTA link, scan it, tick the images you want (odm, boot, abl…) — only those are downloaded — or pick an image file from your phone (the file name must be the partition name, e.g. `odm.img`). Use only compatible images.
+- **Change image (all devices, off by default):** replace any image in the package with one from another ROM. Paste an OTA link, scan it, tick the images you want (odm, boot, abl…) — only those are downloaded — or pick an image file from your phone (the file name must be the partition name, e.g. `odm.img`). Use only compatible images.
 - Runs in the background with a progress notification; the result is saved to Downloads.
 - Needs about 4× the OTA size in free space. English and Turkish UI.
 

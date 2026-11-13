@@ -38,6 +38,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var images by mutableStateOf<List<LocalInbox.Staged>>(emptyList()); private set
     val scan: StateFlow<List<LocalEngine.ImageInfo>?> = LocalEngine.scan
     var selected by mutableStateOf<Set<String>>(emptySet()); private set
+    var changeImage by mutableStateOf(false)      // "İmaj değiştir" anahtarı; kapalıyken seçili imajlar pakete eklenmez
     var stageProgress by mutableStateOf<Float?>(null); private set     // null: kopyalama yok
     var stageError by mutableStateOf<String?>(null); private set
     private var stageJob: Job? = null
@@ -110,7 +111,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             app, form,
             ota = otaFile?.path ?: form.otaUrl,
             base = if (needsBase) (baseFile?.path ?: form.baseOtaUrl) else "",
-            replacements = images,
+            replacements = if (changeImage) images else emptyList(),
         )
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }
@@ -124,6 +125,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         LocalEngine.scanImages(app, url)
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }
+
+    fun setChangeImage(on: Boolean) { changeImage = on }
 
     fun toggleImage(name: String) { selected = if (name in selected) selected - name else selected + name }
 

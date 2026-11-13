@@ -69,7 +69,6 @@
     <string name="notif_done">Build tamamlandı</string>
     <string name="notif_failed">Build başarısız</string>
     <string name="err_not_img">Seçilen dosya bir bölüm imajı değil (ZIP gibi görünüyor ya da boş).</string>
-    <string name="img_title">İmaj değiştir (isteğe bağlı)</string>
     <string name="img_hint">Paketteki imajların yerine başka bir ROM\'dan imaj koyabilirsiniz. OTA bağlantısını yapıştırıp tarayın ve istediğiniz imajları seçin; yalnızca onlar indirilir. Ya da cihazdan bir imaj dosyası seçin (dosya adı bölüm adı olmalı, ör. odm.img). Yalnızca cihazınızla uyumlu imajlar kullanın; yanlış imaj cihazı bozabilir.</string>
     <string name="img_replacing">Şu imajlar ROM\'dakilerin yerine geçecek</string>
     <string name="img_link_label">İmajların alınacağı OTA bağlantısı</string>
@@ -87,4 +86,5 @@
     <string name="err_image_name">Dosyayı &lt;bölüm>.img olarak yeniden adlandırın (küçük harf, rakam ve _), örneğin odm.img.</string>
     <string name="err_image_blocked">%1$s.img builder tarafından üretilir ve değiştirilemez.</string>
     <string name="err_images_space">Seçilen imajlar için yeterli alan yok (%1$s GB gerekli, %2$s GB boş).</string>
+    <string name="img_toggle">İmaj değiştir</string>
 </resources>
