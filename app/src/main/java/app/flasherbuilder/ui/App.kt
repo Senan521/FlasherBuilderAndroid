@@ -343,7 +343,7 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
 
         Row(fm, verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.img_toggle), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            Switch(checked = vm.changeImage, onCheckedChange = vm::setChangeImage, enabled = enabled)
+            Switch(checked = vm.changeImage, onCheckedChange = vm::updateChangeImage, enabled = enabled)
         }
         if (vm.changeImage) ChangeImageSection(vm, enabled)
 
