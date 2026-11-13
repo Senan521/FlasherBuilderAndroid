@@ -353,3 +353,60 @@ def run(root, native_dir, argv, sink):
     finally:
         out.finish()
         sys.stdout, sys.stderr, sys.argv = saved
+
+
+# ───────────────────────── odm.img çıkarma ─────────────────────────
+
+def extract_odm(root, native_dir, source, out_path, cancel_path, sink):
+    """OTA bağlantısından (ya da yerel ZIP'ten) yalnızca odm.img çıkarır.
+
+    Uzak bağlantıda otaripper HTTP aralıklarıyla yalnızca odm bölümünü indirir; OTA'nın tamamı inmez.
+    Dönüş: 0 başarılı, 130 iptal, 1 hata (backend ile aynı kodlar).
+    """
+    import shutil
+    from urllib.parse import urlsplit
+    root = str(root)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    os.chdir(root)
+    out = _Sink(sink)
+    saved = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = out
+    try:
+        _patch(str(native_dir) if native_dir else '')
+        from flasher_builder import backend, native_pipeline
+        source = str(source).strip()
+        if urlsplit(source).scheme not in ('http', 'https') and not Path(source).is_file():
+            raise backend.BuildError('Enter an HTTP(S) OTA link or an existing OTA ZIP.')
+        worker = backend.Worker(str(cancel_path) if cancel_path else None)
+        target = Path(str(out_path))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        work = target.parent / 'odm-extract'
+        shutil.rmtree(work, ignore_errors=True)
+        print('Extracting odm.img — only the ODM partition is downloaded, not the whole OTA.', flush=True)
+        try:
+            directory = native_pipeline.extract(worker, Path(root), source, work, ('odm',), strict=True)
+            odm = directory / 'odm.img'
+            if not odm.is_file() or not odm.stat().st_size or {p.name for p in directory.glob('*.img')} != {'odm.img'}:
+                raise backend.BuildError('Selective extraction did not produce exactly one non-empty odm.img.')
+            kind = _check_odm_image(odm)
+            target.unlink(missing_ok=True)
+            shutil.move(str(odm), str(target))
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        size = target.stat().st_size
+        print(f'@@ODM {size}', flush=True)
+        print(f'odm.img extracted ({size / 1e6:.1f} MB, {kind}).', flush=True)
+        return 0
+    except backend.Cancelled as exc:
+        print(str(exc), flush=True)
+        return 130
+    except (backend.BuildError, OSError, ValueError) as exc:
+        print(f'ERROR: {exc}', flush=True)
+        return 1
+    except BaseException:
+        traceback.print_exc()
+        return 1
+    finally:
+        out.finish()
+        sys.stdout, sys.stderr = saved
