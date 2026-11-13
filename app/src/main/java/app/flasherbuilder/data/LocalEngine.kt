@@ -38,6 +38,12 @@ object LocalEngine {
     val ui: StateFlow<Ui> = _ui.asStateFlow()
     val log: StateFlow<List<String>> = _log.asStateFlow()
 
+    /** OTA taramasının sonucu (null: henüz taranmadı). */
+    data class ImageInfo(val name: String, val size: Long)
+    private val _scan = MutableStateFlow<List<ImageInfo>?>(null)
+    val scan: StateFlow<List<ImageInfo>?> = _scan.asStateFlow()
+    private val scanTmp: MutableList<ImageInfo> = java.util.Collections.synchronizedList(mutableListOf())
+
     private var job: Job? = null
     @Volatile private var cancelRequested = false
     @Volatile private var cancelFlag: File? = null
@@ -66,7 +72,7 @@ object LocalEngine {
 
     fun fail(msg: String) { _ui.value = Ui(Phase.Failed, msg) }
 
-    fun start(ctx: Context, form: Form, ota: String, base: String, customOdm: String? = null) {
+    fun start(ctx: Context, form: Form, ota: String, base: String, replacements: List<LocalInbox.Staged> = emptyList()) {
         if (_ui.value.busy) return
         val app = ctx.applicationContext
         _log.value = emptyList()
@@ -75,7 +81,7 @@ object LocalEngine {
         _ui.value = Ui(Phase.Running, Str.get(R.string.local_preparing))
         job = scope.launch {
             try {
-                pipeline(app, form, ota, base, customOdm)
+                pipeline(app, form, ota, base, replacements)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -84,33 +90,25 @@ object LocalEngine {
         }
     }
 
-    /** OTA bağlantısından yalnızca odm.img çıkarır (OTA'nın tamamı indirilmez) ve inbox'a ODM.img olarak koyar. */
-    fun extractOdm(ctx: Context, source: String) {
+    /** OTA bağlantısındaki imajları listeler (yalnızca manifest indirilir). Sonuç [scan] akışında. */
+    fun scanImages(ctx: Context, source: String) {
         if (_ui.value.busy) return
         val app = ctx.applicationContext
-        _log.value = emptyList()
-        cancelRequested = false
-        lastError = null
-        _ui.value = Ui(Phase.Running, Str.get(R.string.odm_extracting))
+        beginSideTask(Str.get(R.string.scan_running))
+        _scan.value = null
+        scanTmp.clear()
         job = scope.launch {
             try {
-                val nativeDir = app.applicationInfo.nativeLibraryDir
-                for (name in listOf("libotaripper.so", "liblpmake.so")) {
-                    if (!File(nativeDir, name).isFile) error(Str.get(R.string.err_tool_missing, name))
-                }
-                val root = RepoBundle.ensure(app)
-                val cancel = File(app.cacheDir, "local-cancel.flag").also { it.delete() }
-                cancelFlag = cancel
+                val (root, nativeDir, cancel) = prepare(app)
                 if (cancelRequested) { _ui.value = Ui(Phase.Idle, Str.get(R.string.cancelled)); return@launch }
-                val out = File(LocalInbox.dir(app), "ODM.img")
-                if (!Python.isStarted()) Python.start(AndroidPlatform(app))
-                val code = Python.getInstance().getModule("android_entry")
-                    .callAttr("extract_odm", root.path, nativeDir, source, out.path, cancel.path, LogSink(::handleLine))
-                    .toInt()
+                val code = callPython(app, "scan_images", root.path, nativeDir, source, cancel.path)
                 _ui.value = when {
                     code == 130 || cancelRequested -> Ui(Phase.Idle, Str.get(R.string.cancelled))
-                    code == 0 -> Ui(Phase.Idle, Str.get(R.string.odm_extracted, "%.1f".format(out.length() / 1e6)))
-                    else -> Ui(Phase.Failed, Str.get(R.string.err_odm_extract, lastError ?: ""))
+                    code == 0 -> {
+                        _scan.value = synchronized(scanTmp) { scanTmp.toList() }
+                        Ui(Phase.Idle, Str.get(R.string.scan_done, scanTmp.size))
+                    }
+                    else -> Ui(Phase.Failed, Str.get(R.string.err_scan, lastError ?: ""))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -118,6 +116,65 @@ object LocalEngine {
                 _ui.value = Ui(Phase.Failed, e.message ?: e.javaClass.simpleName)
             }
         }
+    }
+
+    /** Seçilen imajları OTA bağlantısından çıkarır (yalnızca o bölümler indirilir) ve images klasörüne koyar. */
+    fun extractImages(ctx: Context, source: String, names: List<String>, totalBytes: Long) {
+        if (_ui.value.busy) return
+        val app = ctx.applicationContext
+        val free = freeBytes(app)
+        if (free < totalBytes + 500_000_000L) {
+            fail(Str.get(R.string.err_images_space, "%.1f".format(totalBytes / 1e9), "%.1f".format(free / 1e9)))
+            return
+        }
+        beginSideTask(Str.get(R.string.extract_running))
+        job = scope.launch {
+            try {
+                val (root, nativeDir, cancel) = prepare(app)
+                if (cancelRequested) { _ui.value = Ui(Phase.Idle, Str.get(R.string.cancelled)); return@launch }
+                val code = callPython(
+                    app, "extract_images", root.path, nativeDir, source,
+                    names.toTypedArray(), LocalInbox.imagesDir(app).path, cancel.path,
+                )
+                _ui.value = when {
+                    code == 130 || cancelRequested -> Ui(Phase.Idle, Str.get(R.string.cancelled))
+                    code == 0 -> Ui(Phase.Idle, Str.get(R.string.extract_done, names.joinToString(", ") { "$it.img" }))
+                    else -> Ui(Phase.Failed, Str.get(R.string.err_extract, lastError ?: ""))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _ui.value = Ui(Phase.Failed, e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    fun clearScan() { _scan.value = null }
+
+    private fun beginSideTask(message: String) {
+        _log.value = emptyList()
+        cancelRequested = false
+        lastError = null
+        _ui.value = Ui(Phase.Running, message)
+    }
+
+    /** Araçların varlığını doğrular, repo paketini açar, iptal bayrağını hazırlar. */
+    private fun prepare(app: Context): Triple<File, String, File> {
+        val nativeDir = app.applicationInfo.nativeLibraryDir
+        for (name in listOf("libotaripper.so", "liblpmake.so")) {
+            if (!File(nativeDir, name).isFile) error(Str.get(R.string.err_tool_missing, name))
+        }
+        val root = RepoBundle.ensure(app)
+        val cancel = File(app.cacheDir, "local-cancel.flag").also { it.delete() }
+        cancelFlag = cancel
+        return Triple(root, nativeDir, cancel)
+    }
+
+    private fun callPython(app: Context, fn: String, vararg args: Any): Int {
+        if (!Python.isStarted()) Python.start(AndroidPlatform(app))
+        return Python.getInstance().getModule("android_entry")
+            .callAttr(fn, *args, LogSink(::handleLine))
+            .toInt()
     }
 
     fun cancel() {
@@ -127,7 +184,7 @@ object LocalEngine {
         _ui.update { it.copy(message = Str.get(R.string.local_cancelling)) }
     }
 
-    private fun pipeline(app: Context, form: Form, ota: String, base: String, customOdm: String?) {
+    private fun pipeline(app: Context, form: Form, ota: String, base: String, replacements: List<LocalInbox.Staged>) {
         val nativeDir = app.applicationInfo.nativeLibraryDir
         for (name in listOf("libotaripper.so", "liblpmake.so")) {
             if (!File(nativeDir, name).isFile) {
@@ -158,7 +215,7 @@ object LocalEngine {
         stage = 1; step = 0; stepTitle = ""
         val args = mutableListOf("--bloat-dir", bloat.path, "--output", out.path, "--ota", ota)
         if (base.isNotBlank()) args += listOf("--base", base)
-        if (customOdm != null) args += listOf("--custom-odm", customOdm)
+        replacements.forEach { args += listOf("--replace-image", "${it.name}=${it.path}") }
         if (form.device == Catalog.X9U) args += if (form.abl == "yes") "--vulnerable-abl" else "--stock-abl"
         if (!finish(py(app, root, nativeDir, args + common))) return
 
@@ -203,6 +260,11 @@ object LocalEngine {
                 val size = if (total > 0) "${"%.2f".format(done / 1e9)} / ${"%.2f".format(total / 1e9)} GB"
                 else "${"%.2f".format(done / 1e9)} GB"
                 _ui.update { it.copy(message = "$label · $size", progress = overall(fraction)) }
+            }
+            line.startsWith("@@IMG ") -> {
+                val p = line.split(" ")
+                val size = p.getOrNull(2)?.toLongOrNull()
+                if (p.size >= 3 && size != null) scanTmp.add(ImageInfo(p[1], size))
             }
             line.startsWith("@@RESULT ") -> result = runCatching { JSONObject(line.removePrefix("@@RESULT ")) }.getOrNull()
             line.startsWith("@@") -> Unit

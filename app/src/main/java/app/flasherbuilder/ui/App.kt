@@ -13,6 +13,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Checkbox
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -338,7 +341,7 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
         }
         vm.stageError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
-        if (vm.supportsCustomOdm) OdmSection(vm, enabled)
+        ChangeImageSection(vm, enabled)
 
         if (vm.needsAbl) {
             Text(stringResource(R.string.abl_question), style = MaterialTheme.typography.titleSmall)
@@ -357,51 +360,81 @@ private fun BuildForm(vm: MainViewModel, enabled: Boolean) {
     }
 }
 
-/** İsteğe bağlı: paketteki odm.img yerine kullanıcının seçtiği odm.img konur. */
+/** "Change image": ROM'daki imajların yerine OTA bağlantısından seçilen ya da cihazdan seçilen imajlar konur. */
 @Composable
-private fun OdmSection(vm: MainViewModel, enabled: Boolean) {
+private fun ChangeImageSection(vm: MainViewModel, enabled: Boolean) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.stageFile("ODM", uri)
+        if (uri != null) vm.pickImage(uri)
     }
+    val scan by vm.scan.collectAsState()
     val fm = Modifier.fillMaxWidth()
-    val staged = vm.odmFile
-    Text(stringResource(R.string.odm_title), style = MaterialTheme.typography.titleSmall)
-    Text(stringResource(R.string.odm_hint), style = MaterialTheme.typography.bodySmall)
-    if (staged != null) {
-        ElevatedCard(fm) {
-            Row(
-                Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.odm_selected), style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        "${staged.name} · ${"%.1f".format(staged.bytes / 1e6)} MB",
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    )
+    val canAct = enabled && vm.stageProgress == null
+
+    Text(stringResource(R.string.img_title), style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.img_hint), style = MaterialTheme.typography.bodySmall)
+
+    // Build'e eklenecek (ROM'dakinin yerine geçecek) imajlar
+    if (vm.images.isNotEmpty()) {
+        Text(stringResource(R.string.img_replacing), style = MaterialTheme.typography.labelMedium)
+        vm.images.forEach { img ->
+            ElevatedCard(fm) {
+                Row(
+                    Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${img.name}.img · ${sizeLabel(img.bytes)}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { vm.removeImage(img.name) }, enabled = enabled) { Text(stringResource(R.string.remove)) }
                 }
-                TextButton(onClick = { vm.clearStaged("ODM") }, enabled = enabled) { Text(stringResource(R.string.remove)) }
             }
         }
-    } else {
-        OutlinedTextField(
-            vm.form.odmUrl, { vm.saveForm(vm.form.copy(odmUrl = it.trim())) }, fm,
-            enabled = enabled, label = { Text(stringResource(R.string.odm_link_label)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        )
-        FilledTonalButton(
-            onClick = vm::extractOdm,
-            enabled = enabled && vm.stageProgress == null && vm.form.odmUrl.startsWith("http"),
-            modifier = fm,
-        ) { Text(stringResource(R.string.odm_extract_btn)) }
-        OutlinedButton(
-            onClick = { picker.launch(arrayOf("*/*")) },
-            enabled = enabled && vm.stageProgress == null,
-            modifier = fm,
-        ) { Text(stringResource(R.string.odm_pick)) }
     }
+
+    // OTA bağlantısından tarama
+    OutlinedTextField(
+        vm.form.imageUrl, { vm.saveForm(vm.form.copy(imageUrl = it.trim())) }, fm,
+        enabled = enabled, label = { Text(stringResource(R.string.img_link_label)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+    )
+    FilledTonalButton(
+        onClick = vm::scanImages,
+        enabled = canAct && vm.form.imageUrl.startsWith("http"),
+        modifier = fm,
+    ) { Text(stringResource(R.string.img_scan_btn)) }
+
+    scan?.let { list ->
+        val offered = list.filter { it.name !in LocalInbox.BLOCKED }
+        Text(stringResource(R.string.img_list_title), style = MaterialTheme.typography.labelMedium)
+        ElevatedCard(fm) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+                offered.forEach { info ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable(enabled = canAct) { vm.toggleImage(info.name) }.padding(end = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = info.name in vm.selected, onCheckedChange = { vm.toggleImage(info.name) }, enabled = canAct)
+                        Text("${info.name}.img", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(sizeLabel(info.size), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        Button(
+            onClick = vm::extractSelected,
+            enabled = canAct && vm.selected.isNotEmpty(),
+            modifier = fm,
+        ) { Text(stringResource(R.string.img_extract_btn, vm.selected.size)) }
+    }
+
+    // Cihazdan imaj dosyası
+    OutlinedButton(
+        onClick = { picker.launch(arrayOf("*/*")) },
+        enabled = canAct,
+        modifier = fm,
+    ) { Text(stringResource(R.string.img_pick_btn)) }
 }
+
+private fun sizeLabel(bytes: Long): String =
+    if (bytes >= 1_000_000_000L) "%.2f GB".format(bytes / 1e9) else "%.1f MB".format(bytes / 1e6)
 
 /** OTA/BASE kaynağı: bağlantı yazılır ya da cihazdan ZIP seçilir. */
 @Composable
