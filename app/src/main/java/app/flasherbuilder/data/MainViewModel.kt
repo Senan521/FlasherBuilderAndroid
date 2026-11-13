@@ -30,12 +30,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val currentType: KindEntry? get() = currentDevice?.types?.firstOrNull { it.kind == form.kind }
     val needsBase: Boolean get() = currentType?.regions?.firstOrNull { it.region == form.region }?.needsBase == true
     val needsAbl: Boolean get() = form.device == Catalog.X9U
-    val supportsCustomOdm: Boolean get() = form.device == Catalog.R13
 
     // Cihazdan seçilen OTA/BASE dosyaları.
     var otaFile by mutableStateOf<LocalInbox.Staged?>(null); private set
     var baseFile by mutableStateOf<LocalInbox.Staged?>(null); private set
-    var odmFile by mutableStateOf<LocalInbox.Staged?>(null); private set
+    // ROM'daki yerine geçecek imajlar + OTA tarama/seçim durumu.
+    var images by mutableStateOf<List<LocalInbox.Staged>>(emptyList()); private set
+    val scan: StateFlow<List<LocalEngine.ImageInfo>?> = LocalEngine.scan
+    var selected by mutableStateOf<Set<String>>(emptySet()); private set
     var stageProgress by mutableStateOf<Float?>(null); private set     // null: kopyalama yok
     var stageError by mutableStateOf<String?>(null); private set
     private var stageJob: Job? = null
@@ -51,7 +53,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         otaFile = LocalInbox.existing(app, "OTA")
         baseFile = LocalInbox.existing(app, "BASE")
-        odmFile = LocalInbox.existing(app, "ODM")
+        images = LocalInbox.images(app)
     }
 
     fun stageFile(role: String, uri: Uri) {
@@ -61,7 +63,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         stageJob = viewModelScope.launch {
             try {
                 val staged = LocalInbox.stage(getApplication(), uri, role) { stageProgress = it }
-                when (role) { "OTA" -> otaFile = staged; "BASE" -> baseFile = staged; else -> odmFile = staged }
+                if (role == "OTA") otaFile = staged else baseFile = staged
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -74,7 +76,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearStaged(role: String) {
         LocalInbox.clear(getApplication(), role)
-        when (role) { "OTA" -> otaFile = null; "BASE" -> baseFile = null; else -> odmFile = null }
+        if (role == "OTA") otaFile = null else baseFile = null
     }
 
     fun saveForm(f: Form) { form = f; prefs.saveForm(f) }
@@ -108,18 +110,55 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             app, form,
             ota = otaFile?.path ?: form.otaUrl,
             base = if (needsBase) (baseFile?.path ?: form.baseOtaUrl) else "",
-            customOdm = if (supportsCustomOdm) odmFile?.path else null,
+            replacements = images,
         )
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }
 
-    /** Ace 5 CN OTA bağlantısından yalnızca odm.img çıkarır. */
-    fun extractOdm() {
-        val url = form.odmUrl.trim()
-        if (!url.startsWith("http")) { LocalEngine.fail(Str.get(R.string.err_odm_link)); return }
+    /** OTA bağlantısındaki imajları tarar. */
+    fun scanImages() {
+        val url = form.imageUrl.trim()
+        if (!url.startsWith("http")) { LocalEngine.fail(Str.get(R.string.err_img_link)); return }
+        selected = emptySet()
         val app = getApplication<Application>()
-        LocalEngine.extractOdm(app, url)
+        LocalEngine.scanImages(app, url)
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
+    }
+
+    fun toggleImage(name: String) { selected = if (name in selected) selected - name else selected + name }
+
+    /** Taramadan seçilen imajları bağlantıdan çıkarır. */
+    fun extractSelected() {
+        val chosen = scan.value?.filter { it.name in selected }.orEmpty()
+        if (chosen.isEmpty()) return
+        val app = getApplication<Application>()
+        LocalEngine.extractImages(app, form.imageUrl.trim(), chosen.map { it.name }, chosen.sumOf { it.size })
+        selected = emptySet()
+        if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
+    }
+
+    /** Cihazdan imaj dosyası seçer (bölüm adı dosya adından: odm.img → odm). */
+    fun pickImage(uri: Uri) {
+        stageJob?.cancel()
+        stageError = null
+        stageProgress = 0f
+        stageJob = viewModelScope.launch {
+            try {
+                LocalInbox.stageImage(getApplication(), uri) { stageProgress = it }
+                refreshStaged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                stageError = e.message ?: Str.get(R.string.err_copy_failed)
+            } finally {
+                stageProgress = null
+            }
+        }
+    }
+
+    fun removeImage(name: String) {
+        LocalInbox.removeImage(getApplication(), name)
+        refreshStaged()
     }
 
     fun cancel() = LocalEngine.cancel()
