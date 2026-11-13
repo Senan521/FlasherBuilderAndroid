@@ -126,7 +126,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }
 
-    fun setChangeImage(on: Boolean) { changeImage = on }
+    fun updateChangeImage(on: Boolean) { changeImage = on }
 
     fun toggleImage(name: String) { selected = if (name in selected) selected - name else selected + name }
 
