@@ -385,6 +385,16 @@ private fun OdmSection(vm: MainViewModel, enabled: Boolean) {
             }
         }
     } else {
+        OutlinedTextField(
+            vm.form.odmUrl, { vm.saveForm(vm.form.copy(odmUrl = it.trim())) }, fm,
+            enabled = enabled, label = { Text(stringResource(R.string.odm_link_label)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        )
+        FilledTonalButton(
+            onClick = vm::extractOdm,
+            enabled = enabled && vm.stageProgress == null && vm.form.odmUrl.startsWith("http"),
+            modifier = fm,
+        ) { Text(stringResource(R.string.odm_extract_btn)) }
         OutlinedButton(
             onClick = { picker.launch(arrayOf("*/*")) },
             enabled = enabled && vm.stageProgress == null,

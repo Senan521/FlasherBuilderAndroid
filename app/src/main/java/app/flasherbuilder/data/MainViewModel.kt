@@ -113,5 +113,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
     }
 
+    /** Ace 5 CN OTA bağlantısından yalnızca odm.img çıkarır. */
+    fun extractOdm() {
+        val url = form.odmUrl.trim()
+        if (!url.startsWith("http")) { LocalEngine.fail(Str.get(R.string.err_odm_link)); return }
+        val app = getApplication<Application>()
+        LocalEngine.extractOdm(app, url)
+        if (LocalEngine.ui.value.busy) app.startForegroundService(Intent(app, BuildService::class.java))
+    }
+
     fun cancel() = LocalEngine.cancel()
 }

@@ -9,7 +9,7 @@ Bilgisayara ihtiyaç duymadan, indirdiğiniz tam OTA ZIP'inden (ya da bağlantı
 - Tam OTA'dan partition'ları çıkarır, süper imajı oluşturur ve hazır flasher paketini (ZIP + SHA-256) verir.
 - Cihaz, flasher türü ve bölgeyi (EU, IN, GLO, CN…) listeden seçersiniz; geçerli kombinasyonlar hazırdır.
 - OTA'yı bağlantıyla indirebilir ya da telefonunuzdaki ZIP dosyasını seçebilirsiniz.
-- **Özel `odm.img` (yalnızca OnePlus 13R seçiliyken):** OnePlus Ace 5 üzerinde 13R ROM kullananlar için; paketteki ODM yerine Ace 5 CN ROM'undan aldığınız `odm.img` konur (kamera sorununu gidermek için). Gerçek 13R'de kullanmayın.
+- **Özel `odm.img` (yalnızca OnePlus 13R seçiliyken):** OnePlus Ace 5 üzerinde 13R ROM kullananlar için; paketteki ODM yerine Ace 5 CN ROM'undan aldığınız `odm.img` konur (kamera sorununu gidermek için). Ace 5 CN OTA bağlantısını yapıştırırsanız yalnızca ODM bölümü indirilip çıkarılır (OTA'nın tamamı inmez), ya da dosyayı kendiniz seçersiniz. Gerçek 13R'de kullanmayın.
 - Build bildirimde ilerler, ekran kapansa da sürer. Bitince paket **İndirilenler** klasörüne kaydedilir.
 - Türkçe ve İngilizce arayüz (Android 13+ için sağ üstte dil seçimi).
 
@@ -40,7 +40,7 @@ Ayrıca: [otaripper](https://github.com/syedinsaf/otaripper) (OTA çıkarma, sye
 **An Android app that builds firmware flasher packages for OnePlus / OPPO / Realme devices right on your phone — no PC needed.**
 Give it a full OTA ZIP (link or file), pick device / flasher type / region, and it produces the flasher package (ZIP + SHA-256).
 
-- Optional **custom `odm.img`** (shown for OnePlus 13R only): for OnePlus Ace 5 users running the 13R ROM — replaces the ODM in the package with the odm.img from your Ace 5 CN ROM (camera fix). Not for a real 13R.
+- Optional **custom `odm.img`** (shown for OnePlus 13R only): for OnePlus Ace 5 users running the 13R ROM — replaces the ODM in the package with the odm.img from your Ace 5 CN ROM (camera fix). Paste the Ace 5 CN OTA link and only its ODM partition is downloaded and extracted (not the whole OTA), or pick the file yourself. Not for a real 13R.
 - Runs in the background with a progress notification; the result is saved to Downloads.
 - Needs about 4× the OTA size in free space. English and Turkish UI.
 

@@ -84,6 +84,42 @@ object LocalEngine {
         }
     }
 
+    /** OTA bağlantısından yalnızca odm.img çıkarır (OTA'nın tamamı indirilmez) ve inbox'a ODM.img olarak koyar. */
+    fun extractOdm(ctx: Context, source: String) {
+        if (_ui.value.busy) return
+        val app = ctx.applicationContext
+        _log.value = emptyList()
+        cancelRequested = false
+        lastError = null
+        _ui.value = Ui(Phase.Running, Str.get(R.string.odm_extracting))
+        job = scope.launch {
+            try {
+                val nativeDir = app.applicationInfo.nativeLibraryDir
+                for (name in listOf("libotaripper.so", "liblpmake.so")) {
+                    if (!File(nativeDir, name).isFile) error(Str.get(R.string.err_tool_missing, name))
+                }
+                val root = RepoBundle.ensure(app)
+                val cancel = File(app.cacheDir, "local-cancel.flag").also { it.delete() }
+                cancelFlag = cancel
+                if (cancelRequested) { _ui.value = Ui(Phase.Idle, Str.get(R.string.cancelled)); return@launch }
+                val out = File(LocalInbox.dir(app), "ODM.img")
+                if (!Python.isStarted()) Python.start(AndroidPlatform(app))
+                val code = Python.getInstance().getModule("android_entry")
+                    .callAttr("extract_odm", root.path, nativeDir, source, out.path, cancel.path, LogSink(::handleLine))
+                    .toInt()
+                _ui.value = when {
+                    code == 130 || cancelRequested -> Ui(Phase.Idle, Str.get(R.string.cancelled))
+                    code == 0 -> Ui(Phase.Idle, Str.get(R.string.odm_extracted, "%.1f".format(out.length() / 1e6)))
+                    else -> Ui(Phase.Failed, Str.get(R.string.err_odm_extract, lastError ?: ""))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                _ui.value = Ui(Phase.Failed, e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
     fun cancel() {
         if (!_ui.value.busy) return
         cancelRequested = true

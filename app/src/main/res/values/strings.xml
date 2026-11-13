@@ -69,8 +69,14 @@
     <string name="notif_done">Build complete</string>
     <string name="notif_failed">Build failed</string>
     <string name="odm_title">Custom odm.img (optional)</string>
-    <string name="odm_hint">For OnePlus Ace 5 users only: replaces the ODM in the package with the odm.img from your Ace 5 CN ROM, which fixes the camera issue on the 13R ROM. Do not use this on a real OnePlus 13R. Leave empty to keep the ROM\'s own ODM.</string>
-    <string name="odm_pick">Pick odm.img</string>
+    <string name="odm_hint">For OnePlus Ace 5 users only: replaces the ODM in the package with the odm.img from your Ace 5 CN ROM, which fixes the camera issue on the 13R ROM. Do not use this on a real OnePlus 13R. Paste the Ace 5 CN OTA link to extract only its ODM, or pick the file. Leave empty to keep the ROM\'s own ODM.</string>
+    <string name="odm_pick">or pick odm.img from this device</string>
     <string name="odm_selected">Custom odm.img selected</string>
     <string name="err_not_img">The selected file is not an Android partition image (sparse, erofs or ext4). Pick the odm.img extracted from a ROM.</string>
+    <string name="odm_link_label">Ace 5 CN OTA link (to extract odm.img from)</string>
+    <string name="odm_extract_btn">Extract odm.img from link</string>
+    <string name="odm_extracting">Extracting odm.img… (only the ODM is downloaded, not the whole OTA)</string>
+    <string name="odm_extracted">odm.img is ready (%1$s MB).</string>
+    <string name="err_odm_extract">Could not extract odm.img from the link. It may have expired, or the server may not allow partial downloads. Try a fresh link or pick the odm.img file. %1$s</string>
+    <string name="err_odm_link">Enter a valid OTA link (https://…).</string>
 </resources>
