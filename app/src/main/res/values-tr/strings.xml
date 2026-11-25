@@ -45,7 +45,6 @@
     <string name="local_preparing">Hazırlanıyor…</string>
     <string name="local_cancelling">İptal ediliyor…</string>
     <string name="cancelled">İptal edildi.</string>
-    <string name="unknown_error">Bilinmeyen hata</string>
     <string name="err_tool_missing">APK\'da %1$s yok. Bu mod yalnızca arm64 cihazlarda ve araçlarla derlenmiş APK\'da çalışır.</string>
     <string name="err_low_space_local">Boş alan çok az (%1$s GB). Tam build OTA boyutunun yaklaşık 4 katı alan ister.</string>
     <string name="local_unpacking">Build dosyaları hazırlanıyor…</string>

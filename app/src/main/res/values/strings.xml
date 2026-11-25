@@ -45,7 +45,6 @@
     <string name="local_preparing">Preparing…</string>
     <string name="local_cancelling">Cancelling…</string>
     <string name="cancelled">Cancelled.</string>
-    <string name="unknown_error">Unknown error</string>
     <string name="err_tool_missing">%1$s is missing from the APK. This mode only works on arm64 devices with an APK built with the tools.</string>
     <string name="err_low_space_local">Very little free space (%1$s GB). A full build needs about 4× the OTA size.</string>
     <string name="local_unpacking">Preparing build files…</string>
